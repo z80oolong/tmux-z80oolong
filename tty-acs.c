@@ -22,9 +22,92 @@
 
 #include "tmux.h"
 
+#ifndef NO_USE_BSEARCH
 static int	tty_acs_cmp(const void *, const void *);
 
+#endif
 /* Table mapping ACS entries to UTF-8. */
+#ifdef NO_USE_BSEARCH
+static const char *tty_acs_table[UCHAR_MAX] = {
+	['+'] = "\342\206\222",	/* arrow pointing right */
+	[','] = "\342\206\220",	/* arrow pointing left */
+	['-'] = "\342\206\221",	/* arrow pointing up */
+	['.'] = "\342\206\223",	/* arrow pointing down */
+	['0'] = "\342\226\256",	/* solid square block */
+	['`'] = "\342\227\206",	/* diamond */
+	['a'] = "\342\226\222",	/* checker board (stipple) */
+	['b'] = "\342\220\211",
+	['c'] = "\342\220\214",
+	['d'] = "\342\220\215",
+	['e'] = "\342\220\212",
+	['f'] = "\302\260",	/* degree symbol */
+	['g'] = "\302\261",	/* plus/minus */
+	['h'] = "\342\220\244",
+	['i'] = "\342\220\213",
+	['j'] = "\342\224\230",	/* lower right corner */
+	['k'] = "\342\224\220",	/* upper right corner */
+	['l'] = "\342\224\214",	/* upper left corner */
+	['m'] = "\342\224\224",	/* lower left corner */
+	['n'] = "\342\224\274",	/* large plus or crossover */
+	['o'] = "\342\216\272",	/* scan line 1 */
+	['p'] = "\342\216\273",	/* scan line 3 */
+	['q'] = "\342\224\200",	/* horizontal line */
+	['r'] = "\342\216\274",	/* scan line 7 */
+	['s'] = "\342\216\275",	/* scan line 9 */
+	['t'] = "\342\224\234",	/* tee pointing right */
+	['u'] = "\342\224\244",	/* tee pointing left */
+	['v'] = "\342\224\264",	/* tee pointing up */
+	['w'] = "\342\224\254",	/* tee pointing down */
+	['x'] = "\342\224\202",	/* vertical line */
+	['y'] = "\342\211\244",	/* less-than-or-equal-to */
+	['z'] = "\342\211\245",	/* greater-than-or-equal-to */
+	['{'] = "\317\200",	/* greek pi */
+	['|'] = "\342\211\240",	/* not-equal */
+	['}'] = "\302\243",	/* UK pound sign */
+	['~'] = "\302\267",	/* bullet */
+};
+
+#ifndef NO_USE_PANE_BORDER_ASCII
+static const char *tty_acs_table_putty[UCHAR_MAX] = {
+	['+'] = "\342\206\222",	/* arrow pointing right */
+	[','] = "\342\206\220",	/* arrow pointing left */
+	['-'] = "\342\206\221",	/* arrow pointing up */
+	['.'] = "\342\206\223",	/* arrow pointing down */
+	['0'] = "\342\226\256",	/* solid square block */
+	['`'] = "\342\227\206",	/* diamond */
+	['a'] = "\342\226\222",	/* checker board (stipple) */
+	['b'] = "\342\220\211",
+	['c'] = "\342\220\214",
+	['d'] = "\342\220\215",
+	['e'] = "\342\220\212",
+	['f'] = "\302\260",	/* degree symbol */
+	['g'] = "\302\261",	/* plus/minus */
+	['h'] = "\342\220\244",
+	['i'] = "\342\220\213",
+	['j'] = "+",	/* lower right corner */
+	['k'] = "+",	/* upper right corner */
+	['l'] = "+",	/* upper left corner */
+	['m'] = "+",	/* lower left corner */
+	['n'] = "+",	/* large plus or crossover */
+	['o'] = "\342\216\272",	/* scan line 1 */
+	['p'] = "\342\216\273",	/* scan line 3 */
+	['q'] = "-",	/* horizontal line */
+	['r'] = "\342\216\274",	/* scan line 7 */
+	['s'] = "\342\216\275",	/* scan line 9 */
+	['t'] = "+",	/* tee pointing right */
+	['u'] = "+",	/* tee pointing left */
+	['v'] = "+",	/* tee pointing up */
+	['w'] = "+",	/* tee pointing down */
+	['x'] = "|",	/* vertical line */
+	['y'] = "\342\211\244",	/* less-than-or-equal-to */
+	['z'] = "\342\211\245",	/* greater-than-or-equal-to */
+	['{'] = "\317\200",	/* greek pi */
+	['|'] = "\342\211\240",	/* not-equal */
+	['}'] = "\302\243",	/* UK pound sign */
+	['~'] = "*",	/* bullet */
+};
+#endif /* NO_USE_PANE_BORDER_ASCII */
+#else
 struct tty_acs_entry {
 	u_char	 	 key;
 	const char	*string;
@@ -107,8 +190,10 @@ const struct tty_acs_entry tty_acs_table_putty[] = {
 	{ '}', "\302\243" },
 	{ '~', "*" }
 };
-#endif
+#endif /* NO_USE_PANE_BORDER_ASCII */
+#endif /* NO_USE_BSEARCH */
 
+#ifndef NO_USE_BSEARCH
 static int
 tty_acs_cmp(const void *key, const void *value)
 {
@@ -118,6 +203,7 @@ tty_acs_cmp(const void *key, const void *value)
 	ch = *(u_char *) key;
 	return (ch - entry->key);
 }
+#endif /* NO_USE_BSEARCH */
 
 /* Should this terminal use ACS instead of UTF-8 line drawing? */
 int
@@ -149,8 +235,10 @@ tty_acs_needed(struct tty *tty)
 const char *
 tty_acs_get(struct tty *tty, u_char ch)
 {
+#ifndef NO_USE_BSEARCH
 	struct tty_acs_entry	*entry;
 
+#endif
 	/* Use the ACS set instead of UTF-8 if needed. */
 	if (tty_acs_needed(tty)) {
 		if (tty->term->acs[ch][0] == '\0')
@@ -159,6 +247,18 @@ tty_acs_get(struct tty *tty, u_char ch)
 	}
 
 	/* Otherwise look up the UTF-8 translation. */
+#ifdef NO_USE_BSEARCH
+#ifdef NO_USE_PANE_BORDER_ASCII
+	return (tty_acs_table[ch]);
+#else
+#ifdef NO_USE_UTF8_CJK
+	return (options_get_number(global_s_options, "pane-border-ascii") ? tty_acs_table_putty[ch] : tty_acs_table[ch]);
+#else
+	return ((options_get_number(global_options, "utf8-cjk") || options_get_number(global_s_options, "pane-border-ascii")) \
+		  ? tty_acs_table_putty[ch] : tty_acs_table[ch]);
+#endif /* NO_USE_UTF8_CJK */
+#endif /* NO_USE_PANE_BORDER_ASCII */
+#else
 #ifdef NO_USE_PANE_BORDER_ASCII
 	entry = bsearch(&ch, tty_acs_table, nitems(tty_acs_table),
 	    sizeof tty_acs_table[0], tty_acs_cmp);
@@ -170,11 +270,11 @@ tty_acs_get(struct tty *tty, u_char ch)
 #else
 	entries = (options_get_number(global_options, "utf8-cjk") || options_get_number(global_s_options, "pane-border-ascii")) \
 		    ? tty_acs_table_putty : tty_acs_table;
-#endif
-
+#endif /* NO_USE_UTF8_CJK */
 	entry = bsearch(&ch, (const void *)entries, nitems(tty_acs_table), sizeof tty_acs_table[0], tty_acs_cmp);
-#endif
+#endif /* NO_USE_PANE_BORDER_ASCII */
 	if (entry == NULL)
 		return (NULL);
 	return (entry->string);
+#endif /* NO_USE_BSEARCH */
 }
