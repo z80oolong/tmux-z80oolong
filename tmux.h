@@ -70,20 +70,6 @@ struct winlink;
 /* Minimum layout cell size, NOT including border lines. */
 #define PANE_MINIMUM 1
 
-/* If "pane-border-ascii" is not used, "utf8-cjk" is not used too. */
-#ifdef NO_USE_PANE_BORDER_ASCII
-#ifndef NO_USE_UTF8CJK
-#define NO_USE_UTF8CJK
-#endif
-#endif
-
-/* If you "Look up the ACS->UTF-8 table directly." pull request patch, */
-/* macro NO_USE_BSEARCH is defined. */
-/* See https://github.com/tmux/tmux/pull/1907 */
-#ifndef USE_BSEARCH
-#define NO_USE_BSEARCH
-#endif
-
 /* Minimum and maximum window size. */
 #define WINDOW_MINIMUM PANE_MINIMUM
 #define WINDOW_MAXIMUM 10000

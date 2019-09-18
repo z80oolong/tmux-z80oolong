@@ -270,6 +270,16 @@ if test "x$enable_utf8proc" = xyes; then
 fi
 AM_CONDITIONAL(HAVE_UTF8PROC, [test "x$enable_utf8proc" = xyes])
 
+AC_ARG_ENABLE(
+	utf8cjk,
+	AC_HELP_STRING(--disable-utf8cjk, I never use in CJK),
+	[],
+	enable_utf8cjk=yes
+)
+if test "x$enable_utf8cjk" != xyes; then
+	AC_DEFINE(NO_USE_UTF8CJK)
+fi
+
 # Check for b64_ntop. If we have b64_ntop, we assume b64_pton as well.
 AC_MSG_CHECKING(for b64_ntop)
 AC_TRY_LINK(

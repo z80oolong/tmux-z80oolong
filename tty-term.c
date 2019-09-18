@@ -546,6 +546,15 @@ tty_term_find(char *name, int fd, char **cause)
 	if (!tty_term_flag(term, TTYC_XENL))
 		term->flags |= TERM_EARLYWRAP;
 
+#ifndef NO_USE_UTF8CJK
+	/* Generate ACS table. */
+	memset(term->acs, 0, sizeof term->acs);
+	if (tty_term_has(term, TTYC_ACSC)) {
+		acs = tty_term_string(term, TTYC_ACSC);
+		for (; acs[0] != '\0' && acs[1] != '\0'; acs += 2)
+			term->acs[(u_char) acs[0]][0] = acs[1];
+	}
+#else
 	/* Generate ACS table. If none is present, use nearest ASCII. */
 	memset(term->acs, 0, sizeof term->acs);
 	if (tty_term_has(term, TTYC_ACSC))
@@ -554,6 +563,7 @@ tty_term_find(char *name, int fd, char **cause)
 		acs = "a#j+k+l+m+n+o-p-q-r-s-t+u+v+w+x|y<z>~.";
 	for (; acs[0] != '\0' && acs[1] != '\0'; acs += 2)
 		term->acs[(u_char) acs[0]][0] = acs[1];
+#endif
 
 	/* On terminals with xterm titles (XT), fill in tsl and fsl. */
 	if (tty_term_flag(term, TTYC_XT) &&
