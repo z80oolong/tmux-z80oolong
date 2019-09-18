@@ -68,6 +68,47 @@ static const struct tty_acs_entry tty_acs_table[] = {
 	{ '~', "\302\267" }		/* bullet */
 };
 
+#ifndef NO_USE_PANE_BORDER_ASCII
+const struct tty_acs_entry tty_acs_table_putty[] = {
+	{ '+', "\342\206\222" },
+	{ ',', "\342\206\220" },
+	{ '-', "\342\206\221" },
+	{ '.', "\342\206\223" },
+	{ '0', "\342\226\256" },
+	{ '`', "\342\227\206" },
+	{ 'a', "\342\226\222" },
+	{ 'b', "\342\220\211" },
+	{ 'c', "\342\220\214" },
+	{ 'd', "\342\220\215" },
+	{ 'e', "\342\220\212" },
+	{ 'f', "\302\260" },
+	{ 'g', "\302\261" },
+	{ 'h', "\342\226\222" },
+	{ 'i', "\342\230\203" },
+	{ 'j', "+" },
+	{ 'k', "+" },
+	{ 'l', "+" },
+	{ 'm', "+" },
+	{ 'n', "+" },
+	{ 'o', "\342\216\272" },
+	{ 'p', "\342\216\273" },
+	{ 'q', "-" },
+	{ 'r', "\342\216\274" },
+	{ 's', "\342\216\275" },
+	{ 't', "+" },
+	{ 'u', "+" },
+	{ 'v', "+" },
+	{ 'w', "+" },
+	{ 'x', "|" },
+	{ 'y', "\342\211\244" },
+	{ 'z', "\342\211\245" },
+	{ '{', "\317\200" },
+	{ '|', "\342\211\240" },
+	{ '}', "\302\243" },
+	{ '~', "*" }
+};
+#endif
+
 static int
 tty_acs_cmp(const void *key, const void *value)
 {
@@ -118,8 +159,21 @@ tty_acs_get(struct tty *tty, u_char ch)
 	}
 
 	/* Otherwise look up the UTF-8 translation. */
+#ifdef NO_USE_PANE_BORDER_ASCII
 	entry = bsearch(&ch, tty_acs_table, nitems(tty_acs_table),
 	    sizeof tty_acs_table[0], tty_acs_cmp);
+#else
+	struct tty_acs_entry *entries;
+
+#ifdef NO_USE_UTF8_CJK
+	entries = options_get_number(global_s_options, "pane-border-ascii") ? tty_acs_table_putty : tty_acs_table;
+#else
+	entries = (options_get_number(global_options, "utf8-cjk") || options_get_number(global_s_options, "pane-border-ascii")) \
+		    ? tty_acs_table_putty : tty_acs_table;
+#endif
+
+	entry = bsearch(&ch, (const void *)entries, nitems(tty_acs_table), sizeof tty_acs_table[0], tty_acs_cmp);
+#endif
 	if (entry == NULL)
 		return (NULL);
 	return (entry->string);
