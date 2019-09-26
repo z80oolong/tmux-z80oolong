@@ -22,7 +22,7 @@
 
 #include "tmux.h"
 
-#ifndef NO_USE_UTF8CJK
+#ifndef NO_USE_PANE_BORDER_ACS_ASCII
 #include <string.h>
 
 static char tty_acs_table[UCHAR_MAX][4] = {
@@ -154,9 +154,9 @@ tty_acs_cmp(const void *key, const void *value)
 	ch = *(u_char *) key;
 	return (ch - entry->key);
 }
-#endif  /* NO_USE_UTF8CJK */
+#endif  /* NO_USE_PANE_BORDER_ACS_ASCII */
 
-#ifndef NO_USE_UTF8CJK
+#ifndef NO_USE_PANE_BORDER_ACS_ASCII
 static int
 get_utf8_width(const char *s)
 {
@@ -230,13 +230,13 @@ tty_acs_type(struct tty *tty)
 
 	return (ACST_ASCII);
 }
-#endif /* NO_USE_UTF8CJK */
+#endif /* NO_USE_PANE_BORDER_ACS_ASCII */
 
 /* Should this terminal use ACS instead of UTF-8 line drawing? */
 int
 tty_acs_needed(struct tty *tty)
 {
-#ifndef NO_USE_UTF8CJK
+#ifndef NO_USE_PANE_BORDER_ACS_ASCII
 	return (tty_acs_type(tty) == ACST_ACS);
 #else
 	if (tty == NULL)
@@ -259,14 +259,14 @@ tty_acs_needed(struct tty *tty)
 	if (tty->flags & TTY_UTF8)
 		return (0);
 	return (1);
-#endif /* NO_USE_UTF8CJK */
+#endif /* NO_USE_PANE_BORDER_ACS_ASCII */
 }
 
 /* Retrieve ACS to output as a string. */
 const char *
 tty_acs_get(struct tty *tty, u_char ch)
 {
-#ifndef NO_USE_UTF8CJK
+#ifndef NO_USE_PANE_BORDER_ACS_ASCII
 	switch (tty_acs_type(tty)) {
 	case ACST_UTF8:
 		if (tty_acs_table[ch][0] != '\0')
@@ -299,5 +299,5 @@ tty_acs_get(struct tty *tty, u_char ch)
 	if (entry == NULL)
 		return (NULL);
 	return (entry->string);
-#endif /* NO_USE_UTF8CJK */
+#endif /* NO_USE_PANE_BORDER_ACS_ASCII */
 }

@@ -546,7 +546,7 @@ tty_term_find(char *name, int fd, char **cause)
 	if (!tty_term_flag(term, TTYC_XENL))
 		term->flags |= TERM_EARLYWRAP;
 
-#ifndef NO_USE_UTF8CJK
+#ifndef NO_USE_PANE_BORDER_ACS_ASCII
 	/* Generate ACS table. */
 	memset(term->acs, 0, sizeof term->acs);
 	if (tty_term_has(term, TTYC_ACSC)) {

@@ -792,14 +792,7 @@ const struct options_table_entry options_table[] = {
 	  .default_num = 1
 	},
 
-#ifndef NO_USE_UTF8CJK
-	/* UTF8 East asian Ambiguous Width charactor options. */
-	{ .name = "utf8-cjk",
-	  .type = OPTIONS_TABLE_FLAG,
-	  .scope = OPTIONS_TABLE_SERVER,
-	  .default_num = 1
-	},
-
+#ifndef NO_USE_PANE_BORDER_ACS_ASCII
 	{ .name = "pane-border-acs",
 	  .type = OPTIONS_TABLE_FLAG,
 	  .scope = OPTIONS_TABLE_SESSION,

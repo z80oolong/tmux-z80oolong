@@ -348,13 +348,6 @@ main(int argc, char **argv)
 		options_set_number(global_w_options, "mode-keys", keys);
 	}
 
-#ifndef NO_USE_UTF8CJK
-	if (!strncmp(ctype, "ja", 2) || !strncmp(ctype, "ko", 2) || !strncmp(ctype, "zh", 2)) {
-		options_set_number(global_options, "utf8-cjk", 1);
-	} else {
-		options_set_number(global_options, "utf8-cjk", 0);
-	}
-#endif
 	/*
 	 * If socket is specified on the command-line with -S or -L, it is
 	 * used. Otherwise, $TMUX is checked and if that fails "default" is
