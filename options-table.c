@@ -792,6 +792,15 @@ const struct options_table_entry options_table[] = {
 	  .default_num = 1
 	},
 
+#ifndef NO_USE_UTF8CJK
+	/* UTF8 East asian Ambiguous Width charactor options. */
+	{ .name = "utf8-cjk",
+	  .type = OPTIONS_TABLE_FLAG,
+	  .scope = OPTIONS_TABLE_SERVER,
+	  .default_num = 1
+	},
+#endif
+
 	/* Hook options. */
 	OPTIONS_TABLE_HOOK("after-bind-key", ""),
 	OPTIONS_TABLE_HOOK("after-capture-pane", ""),
