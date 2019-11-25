@@ -876,7 +876,7 @@ input_set_state(struct window_pane *wp, const struct input_transition *itr)
 void
 input_parse(struct window_pane *wp)
 {
-	struct evbuffer		*evb = wp->event->input;
+	struct evbuffer	*evb = wp->event->input;
 
 	input_parse_buffer(wp, EVBUFFER_DATA(evb), EVBUFFER_LENGTH(evb));
 	evbuffer_drain(evb, EVBUFFER_LENGTH(evb));
@@ -2210,6 +2210,12 @@ input_exit_osc(struct input_ctx *ictx)
 		break;
 	case 4:
 		input_osc_4(ictx, p);
+		break;
+	case 7:
+		if (utf8_isvalid(p)) {
+			screen_set_path(sctx->s, p);
+			server_status_window(ictx->wp->window);
+		}
 		break;
 	case 10:
 		input_osc_10(ictx, p);
