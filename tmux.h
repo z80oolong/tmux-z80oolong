@@ -708,6 +708,7 @@ struct screen_sel;
 struct screen_titles;
 struct screen {
 	char			*title;
+	char			*path;
 	struct screen_titles	*titles;
 
 	struct grid		*grid;		/* grid data */
@@ -1204,6 +1205,7 @@ struct tty {
 		TTY_VT220,
 		TTY_VT320,
 		TTY_VT420,
+		TTY_VT520,
 		TTY_UNKNOWN
 	} term_type;
 
@@ -1220,7 +1222,14 @@ struct tty {
 	struct tty_key	*key_tree;
 };
 #define TTY_TYPES \
-	{ "VT100", "VT101", "VT102", "VT220", "VT320", "VT420", "Unknown" }
+	{ "VT100", \
+	  "VT101", \
+	  "VT102", \
+	  "VT220", \
+	  "VT320", \
+	  "VT420", \
+	  "VT520", \
+	  "Unknown" }
 
 /* TTY command context. */
 struct tty_ctx {
@@ -2353,6 +2362,7 @@ void	 screen_reset_tabs(struct screen *);
 void	 screen_set_cursor_style(struct screen *, u_int);
 void	 screen_set_cursor_colour(struct screen *, const char *);
 void	 screen_set_title(struct screen *, const char *);
+void	 screen_set_path(struct screen *, const char *);
 void	 screen_push_title(struct screen *);
 void	 screen_pop_title(struct screen *);
 void	 screen_resize(struct screen *, u_int, u_int, int);
