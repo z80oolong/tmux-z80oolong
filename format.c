@@ -1128,11 +1128,10 @@ format_find(struct format_tree *ft, const char *key, int modifiers)
 			xasprintf(&found, "%lld", (long long)fe->t);
 			goto found;
 		}
-		if (fe->value == NULL && fe->cb != NULL) {
+		if (fe->value == NULL && fe->cb != NULL)
 			fe->cb(ft, fe);
-			if (fe->value == NULL)
-				fe->value = xstrdup("");
-		}
+		if (fe->value == NULL)
+			fe->value = xstrdup("");
 		found = xstrdup(fe->value);
 		goto found;
 	}
@@ -1315,7 +1314,7 @@ format_build_modifiers(struct format_tree *ft, const char **s, u_int *count)
 		}
 
 		/* Now try single character with arguments. */
-		if (strchr("mCs=", cp[0]) == NULL)
+		if (strchr("mCs=p", cp[0]) == NULL)
 			break;
 		c = cp[0];
 
@@ -1576,15 +1575,15 @@ static int
 format_replace(struct format_tree *ft, const char *key, size_t keylen,
     char **buf, size_t *len, size_t *off)
 {
-	struct window_pane	*wp = ft->wp;
-	const char		*errptr, *copy, *cp, *marker = NULL;
-	char			*copy0, *condition, *found, *new;
-	char			*value, *left, *right;
-	size_t			 valuelen;
-	int			 modifiers = 0, limit = 0, j;
-	struct format_modifier  *list, *fm, *cmp = NULL, *search = NULL;
-	struct format_modifier  *sub = NULL;
-	u_int			 i, count;
+	struct window_pane	 *wp = ft->wp;
+	const char		 *errptr, *copy, *cp, *marker = NULL;
+	char			 *copy0, *condition, *found, *new;
+	char			 *value, *left, *right;
+	size_t			  valuelen;
+	int			  modifiers = 0, limit = 0, width = 0, j;
+	struct format_modifier   *list, *fm, *cmp = NULL, *search = NULL;
+	struct format_modifier	**sub = NULL;
+	u_int			  i, count, nsub = 0;
 
 	/* Make a copy of the key. */
 	copy = copy0 = xstrndup(key, keylen);
@@ -1613,7 +1612,9 @@ format_replace(struct format_tree *ft, const char *key, size_t keylen,
 			case 's':
 				if (fm->argc < 2)
 					break;
-				sub = fm;
+				sub = xreallocarray (sub, nsub + 1,
+				    sizeof *sub);
+				sub[nsub++] = fm;
 				break;
 			case '=':
 				if (fm->argc < 1)
@@ -1624,6 +1625,14 @@ format_replace(struct format_tree *ft, const char *key, size_t keylen,
 					limit = 0;
 				if (fm->argc >= 2 && fm->argv[1] != NULL)
 					marker = fm->argv[1];
+				break;
+			case 'p':
+				if (fm->argc < 1)
+					break;
+				width = strtonum(fm->argv[0], INT_MIN, INT_MAX,
+				    &errptr);
+				if (errptr != NULL)
+					width = 0;
 				break;
 			case 'l':
 				modifiers |= FORMAT_LITERAL;
@@ -1825,10 +1834,10 @@ done:
 	}
 
 	/* Perform substitution if any. */
-	if (sub != NULL) {
-		left = format_expand(ft, sub->argv[0]);
-		right = format_expand(ft, sub->argv[1]);
-		new = format_sub(sub, value, left, right);
+	for (i = 0; i < nsub; i++) {
+		left = format_expand(ft, sub[i]->argv[0]);
+		right = format_expand(ft, sub[i]->argv[1]);
+		new = format_sub(sub[i], value, left, right);
 		format_log(ft, "substitute '%s' to '%s': %s", left, right, new);
 		free(value);
 		value = new;
@@ -1859,6 +1868,19 @@ done:
 		format_log(ft, "applied length limit %d: %s", limit, value);
 	}
 
+	/* Pad the value if needed. */
+	if (width > 0) {
+		new = utf8_padcstr(value, width);
+		free(value);
+		value = new;
+		format_log(ft, "applied padding width %d: %s", width, value);
+	} else if (width < 0) {
+		new = utf8_rpadcstr(value, -width);
+		free(value);
+		value = new;
+		format_log(ft, "applied padding width %d: %s", width, value);
+	}
+
 	/* Expand the buffer and copy in the value. */
 	valuelen = strlen(value);
 	while (*len - *off < valuelen + 1) {
@@ -1871,12 +1893,15 @@ done:
 	format_log(ft, "replaced '%s' with '%s'", copy0, value);
 	free(value);
 
+	free(sub);
 	format_free_modifiers(list, count);
 	free(copy0);
 	return (0);
 
 fail:
 	format_log(ft, "failed %s", copy0);
+
+	free(sub);
 	format_free_modifiers(list, count);
 	free(copy0);
 	return (-1);
@@ -2148,6 +2173,8 @@ format_defaults_client(struct format_tree *ft, struct client *c)
 	format_add(ft, "client_pid", "%ld", (long) c->pid);
 	format_add(ft, "client_height", "%u", tty->sy);
 	format_add(ft, "client_width", "%u", tty->sx);
+	format_add(ft, "client_cell_width", "%u", tty->xpixel);
+	format_add(ft, "client_cell_height", "%u", tty->ypixel);
 	format_add(ft, "client_tty", "%s", c->ttyname);
 	format_add(ft, "client_control_mode", "%d",
 		!!(c->flags & CLIENT_CONTROL));
@@ -2199,6 +2226,8 @@ format_defaults_window(struct format_tree *ft, struct window *w)
 	format_add(ft, "window_name", "%s", w->name);
 	format_add(ft, "window_width", "%u", w->sx);
 	format_add(ft, "window_height", "%u", w->sy);
+	format_add(ft, "window_cell_width", "%u", w->xpixel);
+	format_add(ft, "window_cell_height", "%u", w->ypixel);
 	format_add_cb(ft, "window_layout", format_cb_window_layout);
 	format_add_cb(ft, "window_visible_layout",
 	    format_cb_window_visible_layout);
