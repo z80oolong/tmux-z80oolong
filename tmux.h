@@ -1173,6 +1173,7 @@ struct tty_term {
 #define TERM_NOXENL 0x2
 #define TERM_DECSLRM 0x4
 #define TERM_DECFRA 0x8
+#define TERM_RGBCOLOURS 0x10
 	int		 flags;
 
 	LIST_ENTRY(tty_term) entry;
@@ -1584,11 +1585,14 @@ struct client {
 	 CLIENT_REDRAWSTATUSALWAYS|	\
 	 CLIENT_REDRAWBORDERS|		\
 	 CLIENT_REDRAWOVERLAY)
+#define CLIENT_UNATTACHEDFLAGS	\
+	(CLIENT_DEAD|		\
+	 CLIENT_SUSPENDED|	\
+	 CLIENT_DETACHING)
 #define CLIENT_NOSIZEFLAGS	\
 	(CLIENT_DEAD|		\
 	 CLIENT_SUSPENDED|	\
-	 CLIENT_DETACHING|	\
-	 CLIENT_READONLY)
+	 CLIENT_DETACHING)
 	int		 flags;
 	struct key_table *keytable;
 
@@ -1611,6 +1615,7 @@ struct client {
 #define PROMPT_NUMERIC 0x2
 #define PROMPT_INCREMENTAL 0x4
 #define PROMPT_NOFORMAT 0x8
+#define PROMPT_KEY 0x10
 	int		 prompt_flags;
 
 	struct session	*session;
@@ -1638,6 +1643,7 @@ TAILQ_HEAD(clients, client);
 struct key_binding {
 	key_code		 key;
 	struct cmd_list		*cmdlist;
+	const char		*note;
 
 	int			 flags;
 #define KEY_BINDING_REPEAT 0x1
@@ -1765,6 +1771,7 @@ int		 areshell(const char *);
 void		 setblocking(int, int);
 const char	*find_cwd(void);
 const char	*find_home(void);
+const char	*getversion(void);
 
 /* proc.c */
 struct imsg;
@@ -2149,7 +2156,8 @@ void	 key_bindings_unref_table(struct key_table *);
 struct key_binding *key_bindings_get(struct key_table *, key_code);
 struct key_binding *key_bindings_first(struct key_table *);
 struct key_binding *key_bindings_next(struct key_table *, struct key_binding *);
-void	 key_bindings_add(const char *, key_code, int, struct cmd_list *);
+void	 key_bindings_add(const char *, key_code, const char *, int,
+	     struct cmd_list *);
 void	 key_bindings_remove(const char *, key_code);
 void	 key_bindings_remove_table(const char *);
 void	 key_bindings_init(void);
@@ -2418,7 +2426,7 @@ void	 screen_free(struct screen *);
 void	 screen_reset_tabs(struct screen *);
 void	 screen_set_cursor_style(struct screen *, u_int);
 void	 screen_set_cursor_colour(struct screen *, const char *);
-void	 screen_set_title(struct screen *, const char *);
+int	 screen_set_title(struct screen *, const char *);
 void	 screen_set_path(struct screen *, const char *);
 void	 screen_push_title(struct screen *);
 void	 screen_pop_title(struct screen *);
