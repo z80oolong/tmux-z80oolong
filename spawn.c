@@ -228,9 +228,9 @@ spawn_pane(struct spawn_context *sc, char **cause)
 	 * the pane's stored one unless specified.
 	 */
 	if (sc->cwd != NULL)
-		cwd = format_single(item, sc->cwd, c, s, NULL, NULL);
+		cwd = format_single(item, sc->cwd, c, item->target.s, NULL, NULL);
 	else if (~sc->flags & SPAWN_RESPAWN)
-		cwd = xstrdup(server_client_get_cwd(c, s));
+		cwd = xstrdup(server_client_get_cwd(c, item->target.s));
 	else
 		cwd = NULL;
 
@@ -253,7 +253,8 @@ spawn_pane(struct spawn_context *sc, char **cause)
 		}
 		window_pane_reset_mode_all(sc->wp0);
 		screen_reinit(&sc->wp0->base);
-		input_init(sc->wp0);
+		input_free(sc->wp0->ictx);
+		sc->wp0->ictx = input_init(sc->wp0);
 		new_wp = sc->wp0;
 		new_wp->flags &= ~(PANE_STATUSREADY|PANE_STATUSDRAWN);
 	} else if (sc->lc == NULL) {
@@ -318,7 +319,7 @@ spawn_pane(struct spawn_context *sc, char **cause)
 	/* Then the shell. If respawning, use the old one. */
 	if (~sc->flags & SPAWN_RESPAWN) {
 		tmp = options_get_string(s->options, "default-shell");
-		if (*tmp == '\0' || areshell(tmp))
+		if (!checkshell(tmp))
 			tmp = _PATH_BSHELL;
 		free(new_wp->shell);
 		new_wp->shell = xstrdup(tmp);
