@@ -596,10 +596,31 @@ window_copy_next_paragraph(struct window_mode_entry *wme)
 	window_copy_scroll_to(wme, ox, oy);
 }
 
+char *
+window_copy_get_word(struct window_pane *wp, u_int x, u_int y)
+{
+	struct window_mode_entry	*wme = TAILQ_FIRST(&wp->modes);
+	struct window_copy_mode_data	*data = wme->data;
+	struct grid			*gd = data->screen.grid;
+
+	return (format_grid_word(gd, x, gd->hsize + y));
+}
+
+char *
+window_copy_get_line(struct window_pane *wp, u_int y)
+{
+	struct window_mode_entry	*wme = TAILQ_FIRST(&wp->modes);
+	struct window_copy_mode_data	*data = wme->data;
+	struct grid			*gd = data->screen.grid;
+
+	return (format_grid_line(gd, gd->hsize + y));
+}
+
 static void
 window_copy_formats(struct window_mode_entry *wme, struct format_tree *ft)
 {
 	struct window_copy_mode_data	*data = wme->data;
+	struct grid			*gd = data->screen.grid;
 	char				*s;
 
 	format_add(ft, "scroll_position", "%d", data->oy);
@@ -619,13 +640,13 @@ window_copy_formats(struct window_mode_entry *wme, struct format_tree *ft)
 	} else
 		format_add(ft, "selection_active", "%d", 0);
 
-	s = format_grid_word(data->screen.grid, data->cx, data->cy);
+	s = format_grid_word(gd, data->cx, gd->hsize + data->cy);
 	if (s != NULL) {
 		format_add(ft, "copy_cursor_word", "%s", s);
 		free(s);
 	}
 
-	s = format_grid_line(data->screen.grid, data->cy);
+	s = format_grid_line(gd, gd->hsize + data->cy);
 	if (s != NULL) {
 		format_add(ft, "copy_cursor_line", "%s", s);
 		free(s);
@@ -1545,12 +1566,12 @@ window_copy_cmd_select_line(struct window_copy_cmd_state *cs)
 	window_copy_cursor_start_of_line(wme);
 	data->selrx = data->cx;
 	data->selry = screen_hsize(data->backing) + data->cy - data->oy;
+	data->endselrx = window_copy_find_length(wme, data->selry);
+	data->endselry = data->selry;
 	window_copy_start_selection(wme);
 	for (; np > 1; np--)
 		window_copy_cursor_down(wme, 0);
 	window_copy_cursor_end_of_line(wme);
-	data->endselrx = data->cx;
-	data->endselry = screen_hsize(data->backing) + data->cy - data->oy;
 
 	return (WINDOW_COPY_CMD_REDRAW);
 }
@@ -1569,13 +1590,12 @@ window_copy_cmd_select_word(struct window_copy_cmd_state *cs)
 	data->dx = data->cx;
 	data->dy = screen_hsize(data->backing) + data->cy - data->oy;
 
-	px = data->cx;
-	py = screen_hsize(data->backing) + data->cy - data->oy;
-
 	data->ws = options_get_string(s->options, "word-separators");
 	window_copy_cursor_previous_word(wme, data->ws, 0);
-	data->selrx = data->cx;
-	data->selry = screen_hsize(data->backing) + data->cy - data->oy;
+	px = data->cx;
+	py = screen_hsize(data->backing) + data->cy - data->oy;
+	data->selrx = px;
+	data->selry = py;
 	window_copy_start_selection(wme);
 
 	if (px >= window_copy_find_length(wme, py) ||
@@ -1588,6 +1608,8 @@ window_copy_cmd_select_word(struct window_copy_cmd_state *cs)
 	}
 	data->endselrx = data->cx;
 	data->endselry = screen_hsize(data->backing) + data->cy - data->oy;
+	if (data->dx > data->endselrx)
+		data->dx = data->endselrx;
 
 	return (WINDOW_COPY_CMD_REDRAW);
 }
