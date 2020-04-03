@@ -65,20 +65,32 @@ static void
 cmd_display_menu_get_position(struct client *c, struct cmdq_item *item,
     struct args *args, u_int *px, u_int *py, u_int w, u_int h)
 {
+	struct session		*s = c->session;
 	struct winlink		*wl = item->target.wl;
 	struct window_pane	*wp = item->target.wp;
+	struct style_ranges	*ranges;
 	struct style_range	*sr;
 	const char		*xp, *yp;
-	int			 at = status_at_line(c);
-	u_int			 ox, oy, sx, sy;
+	u_int			 line, ox, oy, sx, sy, lines;
+
+	lines = status_line_size(c);
+	for (line = 0; line < lines; line++) {
+		ranges = &c->status.entries[line].ranges;
+		TAILQ_FOREACH(sr, ranges, entry) {
+			if (sr->type == STYLE_RANGE_WINDOW)
+				break;
+		}
+		if (sr != NULL)
+			break;
+	}
+	if (line == lines)
+		ranges = &c->status.entries[0].ranges;
 
 	xp = args_get(args, 'x');
-	if (xp == NULL)
-		*px = 0;
+	if (xp == NULL || strcmp(xp, "C") == 0)
+		*px = (c->tty.sx - 1) / 2 - w / 2;
 	else if (strcmp(xp, "R") == 0)
 		*px = c->tty.sx - 1;
-	else if (strcmp(xp, "C") == 0)
-		*px = (c->tty.sx - 1) / 2 - w / 2;
 	else if (strcmp(xp, "P") == 0) {
 		tty_window_offset(&c->tty, &ox, &oy, &sx, &sy);
 		if (wp->xoff >= ox)
@@ -91,10 +103,10 @@ cmd_display_menu_get_position(struct client *c, struct cmdq_item *item,
 		else
 			*px = 0;
 	} else if (strcmp(xp, "W") == 0) {
-		if (at == -1)
+		if (status_at_line(c) == -1)
 			*px = 0;
 		else {
-			TAILQ_FOREACH(sr, &c->status.entries[0].ranges, entry) {
+			TAILQ_FOREACH(sr, ranges, entry) {
 				if (sr->type != STYLE_RANGE_WINDOW)
 					continue;
 				if (sr->argument == (u_int)wl->idx)
@@ -111,9 +123,7 @@ cmd_display_menu_get_position(struct client *c, struct cmdq_item *item,
 		*px = c->tty.sx - w;
 
 	yp = args_get(args, 'y');
-	if (yp == NULL)
-		*py = 0;
-	else if (strcmp(yp, "C") == 0)
+	if (yp == NULL || strcmp(yp, "C") == 0)
 		*py = (c->tty.sy - 1) / 2 + h / 2;
 	else if (strcmp(yp, "P") == 0) {
 		tty_window_offset(&c->tty, &ox, &oy, &sx, &sy);
@@ -124,12 +134,30 @@ cmd_display_menu_get_position(struct client *c, struct cmdq_item *item,
 	} else if (strcmp(yp, "M") == 0 && item->shared->mouse.valid)
 		*py = item->shared->mouse.y + h;
 	else if (strcmp(yp, "S") == 0) {
-		if (at == -1)
-			*py = c->tty.sy;
-		else if (at == 0)
-			*py = status_line_size(c) + h;
-		else
-			*py = at;
+		if (options_get_number(s->options, "status-position") == 0) {
+			if (lines != 0)
+				*py = lines + h;
+			else
+				*py = 0;
+		} else {
+			if (lines != 0)
+				*py = c->tty.sy - lines;
+			else
+				*py = c->tty.sy;
+		}
+	}
+	else if (strcmp(yp, "W") == 0) {
+		if (options_get_number(s->options, "status-position") == 0) {
+			if (lines != 0)
+				*py = line + 1 + h;
+			else
+				*py = 0;
+		} else {
+			if (lines != 0)
+				*py = c->tty.sy - lines + line;
+			else
+				*py = c->tty.sy;
+		}
 	} else
 		*py = strtoul(yp, NULL, 10);
 	if (*py < h)
@@ -237,7 +265,7 @@ cmd_display_popup_exec(struct cmd *self, struct cmdq_item *item)
 	}
 
 	if (nlines != 0)
-		h = nlines + 2;
+		h = popup_height(nlines, lines) + 2;
 	else
 		h = c->tty.sy / 2;
 	if (args_has(args, 'h')) {
@@ -262,6 +290,10 @@ cmd_display_popup_exec(struct cmd *self, struct cmdq_item *item)
 		}
 	}
 
+	if (w > c->tty.sx - 1)
+		w = c->tty.sx - 1;
+	if (h > c->tty.sy - 1)
+		h = c->tty.sy - 1;
 	cmd_display_menu_get_position(c, item, args, &px, &py, w, h);
 
 	value = args_get(args, 'd');
@@ -276,7 +308,9 @@ cmd_display_popup_exec(struct cmd *self, struct cmdq_item *item)
 
 	if (args_has(args, 'K'))
 		flags |= POPUP_WRITEKEYS;
-	if (args_has(args, 'E'))
+	if (args_has(args, 'E') > 1)
+		flags |= POPUP_CLOSEEXITZERO;
+	else if (args_has(args, 'E'))
 		flags |= POPUP_CLOSEEXIT;
 	if (popup_display(flags, item, px, py, w, h, nlines, lines, shellcmd,
 	    cmd, cwd, c, fs) != 0)

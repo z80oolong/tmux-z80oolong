@@ -2436,6 +2436,8 @@ void
 format_defaults(struct format_tree *ft, struct client *c, struct session *s,
     struct winlink *wl, struct window_pane *wp)
 {
+	struct paste_buffer	*pb;
+
 	if (c != NULL && c->name != NULL)
 		log_debug("%s: c=%s", __func__, c->name);
 	else
@@ -2475,6 +2477,10 @@ format_defaults(struct format_tree *ft, struct client *c, struct session *s,
 		format_defaults_winlink(ft, wl);
 	if (wp != NULL)
 		format_defaults_pane(ft, wp);
+
+	pb = paste_get_top (NULL);
+	if (pb != NULL)
+		format_defaults_paste_buffer(ft, pb);
 }
 
 /* Set default format keys for a session. */
@@ -2486,6 +2492,7 @@ format_defaults_session(struct format_tree *ft, struct session *s)
 	ft->s = s;
 
 	format_add(ft, "session_name", "%s", s->name);
+	format_add(ft, "session_path", "%s", s->cwd);
 	format_add(ft, "session_windows", "%u", winlink_count(&s->windows));
 	format_add(ft, "session_id", "$%u", s->id);
 
@@ -2739,9 +2746,11 @@ format_defaults_pane(struct format_tree *ft, struct window_pane *wp)
 	format_add(ft, "scroll_region_upper", "%u", wp->base.rupper);
 	format_add(ft, "scroll_region_lower", "%u", wp->base.rlower);
 
-	format_add(ft, "alternate_on", "%d", wp->saved_grid ? 1 : 0);
-	format_add(ft, "alternate_saved_x", "%u", wp->saved_cx);
-	format_add(ft, "alternate_saved_y", "%u", wp->saved_cy);
+	format_add(ft, "alternate_on", "%d", wp->base.saved_grid != NULL);
+	if (wp->base.saved_cx != UINT_MAX)
+		format_add(ft, "alternate_saved_x", "%u", wp->base.saved_cx);
+	if (wp->base.saved_cy != UINT_MAX)
+		format_add(ft, "alternate_saved_y", "%u", wp->base.saved_cy);
 
 	format_add(ft, "cursor_flag", "%d",
 	    !!(wp->base.mode & MODE_CURSOR));
