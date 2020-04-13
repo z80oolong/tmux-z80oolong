@@ -604,10 +604,9 @@ have_event:
 			wp = window_get_active_at(s->curw->window, px, py);
 			if (wp != NULL)
 				where = PANE;
+			else
+				return (KEYC_UNKNOWN);
 		}
-
-		if (where == NOWHERE)
-			return (KEYC_UNKNOWN);
 		if (where == PANE)
 			log_debug("mouse %u,%u on pane %%%u", x, y, wp->id);
 		else if (where == BORDER)
@@ -1541,7 +1540,7 @@ server_client_reset_state(struct client *c)
 	struct window_pane	*wp = w->active, *loop;
 	struct screen		*s;
 	struct options		*oo = c->session->options;
-	int			 mode, cursor = 0;
+	int			 mode, cursor;
 	u_int			 cx = 0, cy = 0, ox, oy, sx, sy;
 
 	if (c->flags & (CLIENT_CONTROL|CLIENT_SUSPENDED))
@@ -1896,6 +1895,8 @@ server_client_command_done(struct cmdq_item *item, __unused void *data)
 
 	if (~c->flags & CLIENT_ATTACHED)
 		c->flags |= CLIENT_EXIT;
+	else if (~c->flags & CLIENT_DETACHING)
+		tty_send_requests(&c->tty);
 	return (CMD_RETURN_NORMAL);
 }
 

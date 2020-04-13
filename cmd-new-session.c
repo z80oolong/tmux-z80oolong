@@ -66,7 +66,7 @@ const struct cmd_entry cmd_has_session_entry = {
 static enum cmd_retval
 cmd_new_session_exec(struct cmd *self, struct cmdq_item *item)
 {
-	struct args		*args = self->args;
+	struct args		*args = cmd_get_args(self);
 	struct client		*c = item->client;
 	struct session		*s, *as, *groupwith;
 	struct environ		*env;
@@ -81,7 +81,7 @@ cmd_new_session_exec(struct cmd *self, struct cmdq_item *item)
 	enum cmd_retval		 retval;
 	struct cmd_find_state    fs;
 
-	if (self->entry == &cmd_has_session_entry) {
+	if (cmd_get_entry(self) == &cmd_has_session_entry) {
 		/*
 		 * cmd_find_target() will fail if the session cannot be found,
 		 * so always return success here.
@@ -207,7 +207,8 @@ cmd_new_session_exec(struct cmd *self, struct cmdq_item *item)
 				goto fail;
 			}
 		}
-	}
+	} else
+		dsx = 80;
 	if (args_has(args, 'y')) {
 		tmp = args_get(args, 'y');
 		if (strcmp(tmp, "-") == 0) {
@@ -222,7 +223,8 @@ cmd_new_session_exec(struct cmd *self, struct cmdq_item *item)
 				goto fail;
 			}
 		}
-	}
+	} else
+		dsy = 24;
 
 	/* Find new session size. */
 	if (!detached && !is_control) {
@@ -233,13 +235,14 @@ cmd_new_session_exec(struct cmd *self, struct cmdq_item *item)
 	} else {
 		tmp = options_get_string(global_s_options, "default-size");
 		if (sscanf(tmp, "%ux%u", &sx, &sy) != 2) {
-			sx = 80;
-			sy = 24;
-		}
-		if (args_has(args, 'x'))
 			sx = dsx;
-		if (args_has(args, 'y'))
 			sy = dsy;
+		} else {
+			if (args_has(args, 'x'))
+				sx = dsx;
+			if (args_has(args, 'y'))
+				sy = dsy;
+		}
 	}
 	if (sx == 0)
 		sx = 1;
@@ -334,7 +337,7 @@ cmd_new_session_exec(struct cmd *self, struct cmdq_item *item)
 	if (args_has(args, 'P')) {
 		if ((template = args_get(args, 'F')) == NULL)
 			template = NEW_SESSION_TEMPLATE;
-		cp = format_single(item, template, c, s, NULL, NULL);
+		cp = format_single(item, template, c, s, s->curw, NULL);
 		cmdq_print(item, "%s", cp);
 		free(cp);
 	}

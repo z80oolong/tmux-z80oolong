@@ -51,7 +51,7 @@ const struct cmd_entry cmd_new_window_entry = {
 static enum cmd_retval
 cmd_new_window_exec(struct cmd *self, struct cmdq_item *item)
 {
-	struct args		*args = self->args;
+	struct args		*args = cmd_get_args(self);
 	struct cmd_find_state	*current = &item->shared->current;
 	struct spawn_context	 sc;
 	struct client		*c = cmd_find_client(item, NULL, 1);
@@ -108,7 +108,8 @@ cmd_new_window_exec(struct cmd *self, struct cmdq_item *item)
 	if (args_has(args, 'P')) {
 		if ((template = args_get(args, 'F')) == NULL)
 			template = NEW_WINDOW_TEMPLATE;
-		cp = format_single(item, template, c, s, new_wl, NULL);
+		cp = format_single(item, template, c, s, new_wl,
+		    new_wl->window->active);
 		cmdq_print(item, "%s", cp);
 		free(cp);
 	}
