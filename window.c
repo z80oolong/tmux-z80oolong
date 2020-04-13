@@ -1076,39 +1076,15 @@ window_pane_get_palette(struct window_pane *wp, int c)
 	return (new);
 }
 
-static void
-window_pane_mode_timer(__unused int fd, __unused short events, void *arg)
-{
-	struct window_pane	*wp = arg;
-	struct timeval		 tv = { .tv_sec = 10 };
-	int			 n = 0;
-
-	evtimer_del(&wp->modetimer);
-	evtimer_add(&wp->modetimer, &tv);
-
-	log_debug("%%%u in mode: last=%ld", wp->id, (long)wp->modelast);
-
-	if (wp->modelast < time(NULL) - WINDOW_MODE_TIMEOUT) {
-		if (ioctl(wp->fd, FIONREAD, &n) == -1 || n > 0)
-			window_pane_reset_mode_all(wp);
-	}
-}
-
 int
-window_pane_set_mode(struct window_pane *wp, const struct window_mode *mode,
-    struct cmd_find_state *fs, struct args *args)
+window_pane_set_mode(struct window_pane *wp, struct window_pane *swp,
+    const struct window_mode *mode, struct cmd_find_state *fs,
+    struct args *args)
 {
-	struct timeval			 tv = { .tv_sec = 10 };
 	struct window_mode_entry	*wme;
 
 	if (!TAILQ_EMPTY(&wp->modes) && TAILQ_FIRST(&wp->modes)->mode == mode)
 		return (1);
-
-	wp->modelast = time(NULL);
-	if (TAILQ_EMPTY(&wp->modes)) {
-		evtimer_set(&wp->modetimer, window_pane_mode_timer, wp);
-		evtimer_add(&wp->modetimer, &tv);
-	}
 
 	TAILQ_FOREACH(wme, &wp->modes, entry) {
 		if (wme->mode == mode)
@@ -1120,6 +1096,7 @@ window_pane_set_mode(struct window_pane *wp, const struct window_mode *mode,
 	} else {
 		wme = xcalloc(1, sizeof *wme);
 		wme->wp = wp;
+		wme->swp = swp;
 		wme->mode = mode;
 		wme->prefix = 1;
 		TAILQ_INSERT_HEAD(&wp->modes, wme, entry);
@@ -1151,7 +1128,6 @@ window_pane_reset_mode(struct window_pane *wp)
 	next = TAILQ_FIRST(&wp->modes);
 	if (next == NULL) {
 		log_debug("%s: no next mode", __func__);
-		evtimer_del(&wp->modetimer);
 		wp->screen = &wp->base;
 	} else {
 		log_debug("%s: next mode is %s", __func__, next->mode->name);
@@ -1184,7 +1160,6 @@ window_pane_key(struct window_pane *wp, struct client *c, struct session *s,
 
 	wme = TAILQ_FIRST(&wp->modes);
 	if (wme != NULL) {
-		wp->modelast = time(NULL);
 		if (wme->mode->key != NULL)
 			wme->mode->key(wme, c, s, wl, (key & ~KEYC_XTERM), m);
 		return (0);
@@ -1250,7 +1225,7 @@ window_pane_search(struct window_pane *wp, const char *term, int regex,
 		}
 		log_debug("%s: %s", __func__, line);
 		if (!regex)
-			found = (fnmatch(new, line, 0) == 0);
+			found = (fnmatch(new, line, flags) == 0);
 		else
 			found = (regexec(&r, line, 0, NULL, 0) == 0);
 		free(line);

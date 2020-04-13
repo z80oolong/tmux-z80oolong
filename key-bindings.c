@@ -387,6 +387,7 @@ key_bindings_init(void)
 		"bind -Tcopy-mode g command-prompt -p'(goto line)' 'send -X goto-line \"%%%\"'",
 		"bind -Tcopy-mode n send -X search-again",
 		"bind -Tcopy-mode q send -X cancel",
+		"bind -Tcopy-mode r send -X refresh-from-pane",
 		"bind -Tcopy-mode t command-prompt -1p'(jump to forward)' 'send -X jump-to-forward \"%%%\"'",
 		"bind -Tcopy-mode Home send -X start-of-line",
 		"bind -Tcopy-mode End send -X end-of-line",
@@ -489,6 +490,7 @@ key_bindings_init(void)
 		"bind -Tcopy-mode-vi n send -X search-again",
 		"bind -Tcopy-mode-vi o send -X other-end",
 		"bind -Tcopy-mode-vi q send -X cancel",
+		"bind -Tcopy-mode-vi r send -X refresh-from-pane",
 		"bind -Tcopy-mode-vi t command-prompt -1p'(jump to forward)' 'send -X jump-to-forward \"%%%\"'",
 		"bind -Tcopy-mode-vi v send -X rectangle-toggle",
 		"bind -Tcopy-mode-vi w send -X next-word",
@@ -535,19 +537,13 @@ struct cmdq_item *
 key_bindings_dispatch(struct key_binding *bd, struct cmdq_item *item,
     struct client *c, struct mouse_event *m, struct cmd_find_state *fs)
 {
-	struct cmd		*cmd;
 	struct cmdq_item	*new_item;
 	int			 readonly;
 
 	if (c == NULL || (~c->flags & CLIENT_READONLY))
 		readonly = 1;
-	else {
-		readonly = 1;
-		TAILQ_FOREACH(cmd, &bd->cmdlist->list, qentry) {
-			if (~cmd->entry->flags & CMD_READONLY)
-				readonly = 0;
-		}
-	}
+	else
+		readonly = cmd_list_all_have(bd->cmdlist, CMD_READONLY);
 	if (!readonly)
 		new_item = cmdq_get_callback(key_bindings_read_only, NULL);
 	else {
