@@ -212,9 +212,9 @@ tty_acs_type(struct tty *tty)
 	if (options_get_number(global_s_options, "pane-border-ascii"))
 		return (ACST_ASCII);
 
-	//if ((tty->flags & TTY_UTF8) &&
-	//    (!tty_term_has(tty->term, TTYC_U8) ||
-	if ((!tty_term_has(tty->term, TTYC_U8) ||
+	/*
+	 * if ((tty->flags & TTY_UTF8) &&
+	    (!tty_term_has(tty->term, TTYC_U8) ||
 	     tty_term_number(tty->term, TTYC_U8) != 0)) {
 		static int hline_width = 0;
 		const char *hline = "\342\224\200";
@@ -225,6 +225,7 @@ tty_acs_type(struct tty *tty)
 		if (hline_width == 1)
 			return (ACST_UTF8);
 	}
+	*/
 
 	if (tty_term_has(tty->term, TTYC_ACSC))
 		return (ACST_ACS);
