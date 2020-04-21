@@ -256,7 +256,7 @@ tty_acs_needed(struct tty *tty)
 	    tty_term_number(tty->term, TTYC_U8) == 0)
 		return (1);
 
-	if (tty->flags & TTY_UTF8)
+	if (tty->client->flags & CLIENT_UTF8)
 		return (0);
 	return (1);
 #endif /* NO_USE_PANE_BORDER_ACS_ASCII */

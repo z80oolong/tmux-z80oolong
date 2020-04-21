@@ -61,7 +61,7 @@ osdep_get_name(int fd, __unused char *tty)
 	size = sizeof kp;
 	if (sysctl(mib, 4, &kp, &size, NULL, 0) == -1)
 		return (NULL);
-	if (*kp.kp_proc.p_comm == '\0')
+	if (size != (sizeof kp) || *kp.kp_proc.p_comm == '\0')
 		return (NULL);
 
 	return (strdup(kp.kp_proc.p_comm));
@@ -93,15 +93,19 @@ osdep_event_init(void)
 {
 	struct event_base	*base;
 
+#ifndef __MAC_10_7
 	/*
 	 * On OS X, kqueue and poll are both completely broken and don't
 	 * work on anything except socket file descriptors (yes, really).
 	 */
 	setenv("EVENT_NOKQUEUE", "1", 1);
 	setenv("EVENT_NOPOLL", "1", 1);
+#endif
 
 	base = event_init();
+#ifndef __MAC_10_7
 	unsetenv("EVENT_NOKQUEUE");
 	unsetenv("EVENT_NOPOLL");
+#endif
 	return (base);
 }
