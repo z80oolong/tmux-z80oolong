@@ -260,7 +260,7 @@ const struct options_table_entry options_table[] = {
 	  .type = OPTIONS_TABLE_STRING,
 	  .scope = OPTIONS_TABLE_SERVER,
 	  .flags = OPTIONS_TABLE_IS_ARRAY,
-	  .default_str = "tmux*:XT,screen*:XT",
+	  .default_str = "tmux*:XT,screen*:XT,xterm*:XT",
 	  .separator = ","
 	},
 
@@ -646,19 +646,15 @@ const struct options_table_entry options_table[] = {
 	},
 
 	{ .name = "main-pane-height",
-	  .type = OPTIONS_TABLE_NUMBER,
+	  .type = OPTIONS_TABLE_STRING,
 	  .scope = OPTIONS_TABLE_WINDOW,
-	  .minimum = 1,
-	  .maximum = INT_MAX,
-	  .default_num = 24
+	  .default_str = "24"
 	},
 
 	{ .name = "main-pane-width",
-	  .type = OPTIONS_TABLE_NUMBER,
+	  .type = OPTIONS_TABLE_STRING,
 	  .scope = OPTIONS_TABLE_WINDOW,
-	  .minimum = 1,
-	  .maximum = INT_MAX,
-	  .default_num = 80
+	  .default_str = "80"
 	},
 
 	{ .name = "mode-keys",
@@ -695,19 +691,15 @@ const struct options_table_entry options_table[] = {
 	},
 
 	{ .name = "other-pane-height",
-	  .type = OPTIONS_TABLE_NUMBER,
+	  .type = OPTIONS_TABLE_STRING,
 	  .scope = OPTIONS_TABLE_WINDOW,
-	  .minimum = 0,
-	  .maximum = INT_MAX,
-	  .default_num = 0
+	  .default_str = "0"
 	},
 
 	{ .name = "other-pane-width",
-	  .type = OPTIONS_TABLE_NUMBER,
+	  .type = OPTIONS_TABLE_STRING,
 	  .scope = OPTIONS_TABLE_WINDOW,
-	  .minimum = 0,
-	  .maximum = INT_MAX,
-	  .default_num = 0
+	  .default_str = "0"
 	},
 
 	{ .name = "pane-active-border-style",
