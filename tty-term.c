@@ -64,6 +64,8 @@ static const struct tty_term_code_entry tty_term_codes[] = {
 	[TTYC_BOLD] = { TTYCODE_STRING, "bold" },
 	[TTYC_CIVIS] = { TTYCODE_STRING, "civis" },
 	[TTYC_CLEAR] = { TTYCODE_STRING, "clear" },
+	[TTYC_CLMG] = { TTYCODE_STRING, "Clmg" },
+	[TTYC_CMG] = { TTYCODE_STRING, "Cmg" },
 	[TTYC_CNORM] = { TTYCODE_STRING, "cnorm" },
 	[TTYC_COLORS] = { TTYCODE_NUMBER, "colors" },
 	[TTYC_CR] = { TTYCODE_STRING, "Cr" },
@@ -84,12 +86,18 @@ static const struct tty_term_code_entry tty_term_codes[] = {
 	[TTYC_DIM] = { TTYCODE_STRING, "dim" },
 	[TTYC_DL1] = { TTYCODE_STRING, "dl1" },
 	[TTYC_DL] = { TTYCODE_STRING, "dl" },
+	[TTYC_DSFCS] = { TTYCODE_STRING, "Dsfcs" },
+	[TTYC_DSBP] = { TTYCODE_STRING, "Dsbp" },
+	[TTYC_DSMG] = { TTYCODE_STRING, "Dsmg" },
 	[TTYC_E3] = { TTYCODE_STRING, "E3" },
 	[TTYC_ECH] = { TTYCODE_STRING, "ech" },
 	[TTYC_ED] = { TTYCODE_STRING, "ed" },
 	[TTYC_EL1] = { TTYCODE_STRING, "el1" },
 	[TTYC_EL] = { TTYCODE_STRING, "el" },
 	[TTYC_ENACS] = { TTYCODE_STRING, "enacs" },
+	[TTYC_ENBP] = { TTYCODE_STRING, "Enbp" },
+	[TTYC_ENFCS] = { TTYCODE_STRING, "Enfcs" },
+	[TTYC_ENMG] = { TTYCODE_STRING, "Enmg" },
 	[TTYC_FSL] = { TTYCODE_STRING, "fsl" },
 	[TTYC_HOME] = { TTYCODE_STRING, "home" },
 	[TTYC_HPA] = { TTYCODE_STRING, "hpa" },
@@ -240,8 +248,8 @@ static const struct tty_term_code_entry tty_term_codes[] = {
 	[TTYC_OP] = { TTYCODE_STRING, "op" },
 	[TTYC_REV] = { TTYCODE_STRING, "rev" },
 	[TTYC_RGB] = { TTYCODE_FLAG, "RGB" },
-	[TTYC_RI] = { TTYCODE_STRING, "ri" },
 	[TTYC_RIN] = { TTYCODE_STRING, "rin" },
+	[TTYC_RI] = { TTYCODE_STRING, "ri" },
 	[TTYC_RMACS] = { TTYCODE_STRING, "rmacs" },
 	[TTYC_RMCUP] = { TTYCODE_STRING, "rmcup" },
 	[TTYC_RMKX] = { TTYCODE_STRING, "rmkx" },
@@ -268,7 +276,7 @@ static const struct tty_term_code_entry tty_term_codes[] = {
 	[TTYC_U8] = { TTYCODE_NUMBER, "U8" },
 	[TTYC_VPA] = { TTYCODE_STRING, "vpa" },
 	[TTYC_XENL] = { TTYCODE_FLAG, "xenl" },
-	[TTYC_XT] = { TTYCODE_FLAG, "XT" },
+	[TTYC_XT] = { TTYCODE_FLAG, "XT" }
 };
 
 u_int
@@ -534,6 +542,9 @@ tty_term_create(struct tty *tty, char *name, int *feat, int fd, char **cause)
 	del_curterm(cur_term);
 #endif
 
+	/* Apply overrides so any capabilities used for features are changed. */
+	tty_term_apply_overrides(term);
+
 	/* These are always required. */
 	if (!tty_term_has(term, TTYC_CLEAR)) {
 		xasprintf(cause, "terminal does not support clear");
@@ -544,23 +555,31 @@ tty_term_create(struct tty *tty, char *name, int *feat, int fd, char **cause)
 		goto error;
 	}
 
-	/* These can be emulated so one of the two is required. */
-	if (!tty_term_has(term, TTYC_CUD1) && !tty_term_has(term, TTYC_CUD)) {
-		xasprintf(cause, "terminal does not support cud1 or cud");
-		goto error;
+	/*
+	 * If TERM has XT or clear starts with CSI then it is safe to assume
+	 * the terminal is derived from the VT100. This controls whether device
+	 * attributes requests are sent to get more information.
+	 *
+	 * This is a bit of a hack but there aren't that many alternatives.
+	 * Worst case tmux will just fall back to using whatever terminfo(5)
+	 * says without trying to correct anything that is missing.
+	 *
+	 * Also add few features that VT100-like terminals should either
+	 * support or safely ignore.
+	 */
+	s = tty_term_string(term, TTYC_CLEAR);
+	if (tty_term_flag(term, TTYC_XT) || strncmp(s, "\033[", 2) == 0) {
+		term->flags |= TERM_VT100LIKE;
+		tty_add_features(feat, "bpaste,focus,title", ",");
 	}
 
 	/* Add RGB feature if terminal has RGB colours. */
 	if ((tty_term_flag(term, TTYC_TC) || tty_term_has(term, TTYC_RGB)) &&
 	    (!tty_term_has(term, TTYC_SETRGBF) ||
 	    !tty_term_has(term, TTYC_SETRGBB)))
-		tty_add_features(feat, "RGB", ":,");
+		tty_add_features(feat, "RGB", ",");
 
-	/* Add feature if terminal has XT. */
-	if (tty_term_flag(term, TTYC_XT))
-		tty_add_features(feat, "title", ":,");
-
-	/* Apply the features and overrides. */
+	/* Apply the features and overrides again. */
 	tty_apply_features(term, *feat);
 	tty_term_apply_overrides(term);
 

@@ -52,7 +52,7 @@ static int	tty_keys_clipboard(struct tty *, const char *, size_t,
 		    size_t *);
 static int	tty_keys_device_attributes(struct tty *, const char *, size_t,
 		    size_t *);
-static int	tty_keys_device_status_report(struct tty *, const char *,
+static int	tty_keys_extended_device_attributes(struct tty *, const char *,
 		    size_t, size_t *);
 
 /* Default raw keys. */
@@ -612,8 +612,8 @@ tty_keys_next(struct tty *tty)
 		goto partial_key;
 	}
 
-	/* Is this a device status report response? */
-	switch (tty_keys_device_status_report(tty, buf, len, &size)) {
+	/* Is this an extended device attributes response? */
+	switch (tty_keys_extended_device_attributes(tty, buf, len, &size)) {
 	case 0:		/* yes */
 		key = KEYC_UNKNOWN;
 		goto complete_key;
@@ -936,7 +936,7 @@ tty_keys_clipboard(__unused struct tty *tty, const char *buf, size_t len,
 
 	*size = 0;
 
-	/* First three bytes are always \033]52;. */
+	/* First five bytes are always \033]52;. */
 	if (buf[0] != '\033')
 		return (-1);
 	if (len == 1)
@@ -1040,9 +1040,11 @@ tty_keys_device_attributes(struct tty *tty, const char *buf, size_t len,
 		return (1);
 
 	/* Copy the rest up to a 'c'. */
-	for (i = 0; i < (sizeof tmp) - 1 && buf[3 + i] != 'c'; i++) {
+	for (i = 0; i < (sizeof tmp) - 1; i++) {
 		if (3 + i == len)
 			return (1);
+		if (buf[3 + i] == 'c')
+			break;
 		tmp[i] = buf[3 + i];
 	}
 	if (i == (sizeof tmp) - 1)
@@ -1068,28 +1070,13 @@ tty_keys_device_attributes(struct tty *tty, const char *buf, size_t len,
 		    ",");
 		break;
 	case 'M': /* mintty */
-		tty_add_features(&c->term_features,
-		    "256,"
-		    "RGB,"
-		    "title",
-		    ",");
+		tty_default_features(&c->term_features, "mintty", 0);
 		break;
 	case 'T': /* tmux */
-		tty_add_features(&c->term_features,
-		    "256,"
-		    "RGB,"
-		    "ccolour,"
-		    "cstyle,"
-		    "overline,"
-		    "title,"
-		    "usstyle",
-		    ",");
+		tty_default_features(&c->term_features, "tmux", 0);
 		break;
 	case 'U': /* rxvt-unicode */
-		tty_add_features(&c->term_features,
-		    "256,"
-		    "title",
-		    ",");
+		tty_default_features(&c->term_features, "rxvt-unicode", 0);
 		break;
 	}
 	log_debug("%s: received secondary DA %.*s", c->name, (int)*size, buf);
@@ -1101,72 +1088,68 @@ tty_keys_device_attributes(struct tty *tty, const char *buf, size_t len,
 }
 
 /*
- * Handle device status report input. Returns 0 for success, -1 for failure, 1
- * for partial.
+ * Handle extended device attributes input. Returns 0 for success, -1 for
+ * failure, 1 for partial.
  */
 static int
-tty_keys_device_status_report(struct tty *tty, const char *buf, size_t len,
-    size_t *size)
+tty_keys_extended_device_attributes(struct tty *tty, const char *buf,
+    size_t len, size_t *size)
 {
 	struct client	*c = tty->client;
 	u_int		 i;
-	char		 tmp[64];
+	char		 tmp[128];
 
 	*size = 0;
-	if (tty->flags & TTY_HAVEDSR)
+	if (tty->flags & TTY_HAVEXDA)
 		return (-1);
 
-	/* First three bytes are always \033[. */
+	/* First four bytes are always \033P>|. */
 	if (buf[0] != '\033')
 		return (-1);
 	if (len == 1)
 		return (1);
-	if (buf[1] != '[')
+	if (buf[1] != 'P')
 		return (-1);
 	if (len == 2)
 		return (1);
-	if (buf[2] != 'I' && buf[2] != 'T')
+	if (buf[2] != '>')
 		return (-1);
 	if (len == 3)
 		return (1);
+	if (buf[3] != '|')
+		return (-1);
+	if (len == 4)
+		return (1);
 
-	/* Copy the rest up to a 'n'. */
-	for (i = 0; i < (sizeof tmp) - 1 && buf[2 + i] != 'n'; i++) {
-		if (2 + i == len)
+	/* Copy the rest up to a '\033\\'. */
+	for (i = 0; i < (sizeof tmp) - 1; i++) {
+		if (4 + i == len)
 			return (1);
-		tmp[i] = buf[2 + i];
+		if (buf[4 + i - 1] == '\033' && buf[4 + i] == '\\')
+			break;
+		tmp[i] = buf[4 + i];
 	}
 	if (i == (sizeof tmp) - 1)
 		return (-1);
-	tmp[i] = '\0';
-	*size = 3 + i;
+	tmp[i - 1] = '\0';
+	*size = 5 + i;
 
 	/* Add terminal features. */
-	if (strncmp(tmp, "ITERM2 ", 7) == 0) {
-		tty_add_features(&c->term_features,
-		    "256,"
-		    "RGB,"
-		    "clipboard,"
-		    "cstyle,"
-		    "margins,"
-		    "sync,"
-		    "title",
-		    ",");
-	} else if (strncmp(tmp, "TMUX ", 5) == 0) {
-		tty_add_features(&c->term_features,
-		    "256,"
-		    "RGB,"
-		    "ccolour,"
-		    "cstyle,"
-		    "overline,"
-		    "title,"
-		    "usstyle",
-		    ",");
-	}
-	log_debug("%s: received DSR %.*s", c->name, (int)*size, buf);
+	if (strncmp(tmp, "iTerm2 ", 7) == 0)
+		tty_default_features(&c->term_features, "iTerm2", 0);
+	else if (strncmp(tmp, "tmux ", 5) == 0)
+		tty_default_features(&c->term_features, "tmux", 0);
+	else if (strncmp(tmp, "XTerm(", 6) == 0)
+		tty_default_features(&c->term_features, "xterm", 0);
+	else if (strncmp(tmp, "mintty ", 7) == 0)
+		tty_default_features(&c->term_features, "mintty", 0);
+	log_debug("%s: received extended DA %.*s", c->name, (int)*size, buf);
+
+	free(c->term_type);
+	c->term_type = xstrdup(tmp);
 
 	tty_update_features(tty);
-	tty->flags |= TTY_HAVEDSR;
+	tty->flags |= TTY_HAVEXDA;
 
 	return (0);
 }

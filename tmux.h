@@ -65,9 +65,12 @@ struct winlink;
 /* Client-server protocol version. */
 #define PROTOCOL_VERSION 8
 
-/* Default configuration files. */
+/* Default configuration files and socket paths. */
 #ifndef TMUX_CONF
 #define TMUX_CONF "/etc/tmux.conf:~/.tmux.conf"
+#endif
+#ifndef TMUX_SOCK
+#define TMUX_SOCK "$TMUX_TMPDIR:" _PATH_TMP
 #endif
 
 /* Minimum layout cell size, NOT including border lines. */
@@ -256,6 +259,8 @@ enum tty_code_code {
 	TTYC_BOLD,
 	TTYC_CIVIS,
 	TTYC_CLEAR,
+	TTYC_CLMG,
+	TTYC_CMG,
 	TTYC_CNORM,
 	TTYC_COLORS,
 	TTYC_CR,
@@ -276,12 +281,18 @@ enum tty_code_code {
 	TTYC_DIM,
 	TTYC_DL,
 	TTYC_DL1,
+	TTYC_DSBP,
+	TTYC_DSFCS,
+	TTYC_DSMG,
 	TTYC_E3,
 	TTYC_ECH,
 	TTYC_ED,
 	TTYC_EL,
 	TTYC_EL1,
 	TTYC_ENACS,
+	TTYC_ENBP,
+	TTYC_ENFCS,
+	TTYC_ENMG,
 	TTYC_FSL,
 	TTYC_HOME,
 	TTYC_HPA,
@@ -447,11 +458,11 @@ enum tty_code_code {
 	TTYC_SITM,
 	TTYC_SMACS,
 	TTYC_SMCUP,
-	TTYC_SMOL,
 	TTYC_SMKX,
+	TTYC_SMOL,
 	TTYC_SMSO,
-	TTYC_SMULX,
 	TTYC_SMUL,
+	TTYC_SMULX,
 	TTYC_SMXX,
 	TTYC_SS,
 	TTYC_SYNC,
@@ -460,7 +471,7 @@ enum tty_code_code {
 	TTYC_U8,
 	TTYC_VPA,
 	TTYC_XENL,
-	TTYC_XT,
+	TTYC_XT
 };
 
 /* Message codes. */
@@ -1191,6 +1202,7 @@ struct tty_term {
 #define TERM_DECSLRM 0x4
 #define TERM_DECFRA 0x8
 #define TERM_RGBCOLOURS 0x10
+#define TERM_VT100LIKE 0x20
 	int		 flags;
 
 	LIST_ENTRY(tty_term) entry;
@@ -1249,7 +1261,7 @@ struct tty {
 #define TTY_FOCUS 0x40
 #define TTY_BLOCK 0x80
 #define TTY_HAVEDA 0x100
-#define TTY_HAVEDSR 0x200
+#define TTY_HAVEXDA 0x200
 #define TTY_SYNCING 0x400
 	int		 flags;
 
@@ -1499,6 +1511,7 @@ struct client {
 
 	char		*term_name;
 	int		 term_features;
+	char		*term_type;
 
 	char		*ttyname;
 	struct tty	 tty;
@@ -1744,6 +1757,8 @@ const char	*sig2name(int);
 const char	*find_cwd(void);
 const char	*find_home(void);
 const char	*getversion(void);
+void		 expand_paths(const char *, char ***, u_int *);
+
 
 /* proc.c */
 struct imsg;
@@ -2021,6 +2036,7 @@ const char	*tty_term_describe(struct tty_term *, enum tty_code_code);
 void		 tty_add_features(int *, const char *, const char *);
 const char	*tty_get_features(int);
 int		 tty_apply_features(struct tty_term *, int);
+void		 tty_default_features(int *, const char *, u_int);
 
 /* tty-acs.c */
 int		 tty_acs_needed(struct tty *);
@@ -2706,7 +2722,7 @@ struct session	*session_create(const char *, const char *, const char *,
 void		 session_destroy(struct session *, int,  const char *);
 void		 session_add_ref(struct session *, const char *);
 void		 session_remove_ref(struct session *, const char *);
-int		 session_check_name(const char *);
+char		*session_check_name(const char *);
 void		 session_update_activity(struct session *, struct timeval *);
 struct session	*session_next_session(struct session *);
 struct session	*session_previous_session(struct session *);

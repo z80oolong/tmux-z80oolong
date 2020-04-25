@@ -287,7 +287,7 @@ tty_start_timer_callback(__unused int fd, __unused short events, void *data)
 	struct client	*c = tty->client;
 
 	log_debug("%s: start timer fired", c->name);
-	tty->flags |= (TTY_HAVEDA|TTY_HAVEDSR);
+	tty->flags |= (TTY_HAVEDA|TTY_HAVEXDA);
 }
 
 void
@@ -330,13 +330,12 @@ tty_start_tty(struct tty *tty)
 		tty_puts(tty, "\033[?1006l\033[?1005l");
 	}
 
-	if (tty_term_flag(tty->term, TTYC_XT)) {
-		if (options_get_number(global_options, "focus-events")) {
-			tty->flags |= TTY_FOCUS;
-			tty_puts(tty, "\033[?1004h");
-		}
-		tty_puts(tty, "\033[?7727h");
+	if (options_get_number(global_options, "focus-events")) {
+		tty->flags |= TTY_FOCUS;
+		tty_raw(tty, tty_term_string(tty->term, TTYC_ENFCS));
 	}
+	if (tty->term->flags & TERM_VT100LIKE)
+		tty_puts(tty, "\033[?7727h");
 
 	evtimer_set(&tty->start_timer, tty_start_timer_callback, tty);
 	evtimer_add(&tty->start_timer, &tv);
@@ -358,13 +357,13 @@ tty_send_requests(struct tty *tty)
 	if (~tty->flags & TTY_STARTED)
 		return;
 
-	if (tty_term_flag(tty->term, TTYC_XT)) {
+	if (tty->term->flags & TERM_VT100LIKE) {
 		if (~tty->flags & TTY_HAVEDA)
 			tty_puts(tty, "\033[>c");
-		if (~tty->flags & TTY_HAVEDSR)
-			tty_puts(tty, "\033[1337n");
+		if (~tty->flags & TTY_HAVEXDA)
+			tty_puts(tty, "\033[>q");
 	} else
-		tty->flags |= (TTY_HAVEDA|TTY_HAVEDSR);
+		tty->flags |= (TTY_HAVEDA|TTY_HAVEXDA);
 }
 
 void
@@ -407,7 +406,7 @@ tty_stop_tty(struct tty *tty)
 			tty_raw(tty, tty_term_string1(tty->term, TTYC_SS, 0));
 	}
 	if (tty->mode & MODE_BRACKETPASTE)
-		tty_raw(tty, "\033[?2004l");
+		tty_raw(tty, tty_term_string(tty->term, TTYC_DSBP));
 	if (*tty->ccolour != '\0')
 		tty_raw(tty, tty_term_string(tty->term, TTYC_CR));
 
@@ -417,16 +416,15 @@ tty_stop_tty(struct tty *tty)
 		tty_raw(tty, "\033[?1006l\033[?1005l");
 	}
 
-	if (tty_term_flag(tty->term, TTYC_XT)) {
-		if (tty->flags & TTY_FOCUS) {
-			tty->flags &= ~TTY_FOCUS;
-			tty_raw(tty, "\033[?1004l");
-		}
-		tty_raw(tty, "\033[?7727l");
+	if (tty->flags & TTY_FOCUS) {
+		tty->flags &= ~TTY_FOCUS;
+		tty_raw(tty, tty_term_string(tty->term, TTYC_DSFCS));
 	}
+	if (tty->term->flags & TERM_VT100LIKE)
+		tty_raw(tty, "\033[?7727l");
 
 	if (tty_use_margin(tty))
-		tty_raw(tty, "\033[?69l"); /* DECLRMM */
+		tty_raw(tty, tty_term_string(tty->term, TTYC_DSMG));
 	tty_raw(tty, tty_term_string(tty->term, TTYC_RMCUP));
 
 	setblocking(tty->fd, 1);
@@ -473,7 +471,7 @@ tty_update_features(struct tty *tty)
 		tty_term_apply_overrides(tty->term);
 
 	if (tty_use_margin(tty))
-		tty_puts(tty, "\033[?69h"); /* DECLRMM */
+		tty_putcode(tty, TTYC_ENMG);
 }
 
 void
@@ -676,7 +674,8 @@ tty_update_mode(struct tty *tty, int mode, struct screen *s)
 		mode &= ~MODE_CURSOR;
 
 	changed = mode ^ tty->mode;
-	log_debug("%s: update mode %x to %x", c->name, tty->mode, mode);
+	if (changed != 0)
+		log_debug("%s: update mode %x to %x", c->name, tty->mode, mode);
 
 	if (changed & MODE_BLINKING) {
 		if (tty_term_has(tty->term, TTYC_CVVIS))
@@ -729,9 +728,9 @@ tty_update_mode(struct tty *tty, int mode, struct screen *s)
 	}
 	if (changed & MODE_BRACKETPASTE) {
 		if (mode & MODE_BRACKETPASTE)
-			tty_puts(tty, "\033[?2004h");
+			tty_putcode(tty, TTYC_ENBP);
 		else
-			tty_puts(tty, "\033[?2004l");
+			tty_putcode(tty, TTYC_DSBP);
 	}
 	tty->mode = mode;
 }
@@ -2028,7 +2027,7 @@ tty_invalidate(struct tty *tty)
 
 	if (tty->flags & TTY_STARTED) {
 		if (tty_use_margin(tty))
-			tty_puts(tty, "\033[?69h"); /* DECLRMM */
+			tty_putcode(tty, TTYC_ENMG);
 		tty_putcode(tty, TTYC_SGR0);
 
 		tty->mode = ALL_MODES;
@@ -2105,8 +2104,6 @@ tty_margin_pane(struct tty *tty, const struct tty_ctx *ctx)
 static void
 tty_margin(struct tty *tty, u_int rleft, u_int rright)
 {
-	char s[64];
-
 	if (!tty_use_margin(tty))
 		return;
 	if (tty->rleft == rleft && tty->rright == rright)
@@ -2118,10 +2115,9 @@ tty_margin(struct tty *tty, u_int rleft, u_int rright)
 	tty->rright = rright;
 
 	if (rleft == 0 && rright == tty->sx - 1)
-		snprintf(s, sizeof s, "\033[s");
+		tty_putcode(tty, TTYC_CLMG);
 	else
-		snprintf(s, sizeof s, "\033[%u;%us", rleft + 1, rright + 1);
-	tty_puts(tty, s);
+		tty_putcode2(tty, TTYC_CMG, rleft, rright);
 	tty->cx = tty->cy = UINT_MAX;
 }
 

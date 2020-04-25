@@ -2715,7 +2715,7 @@ Commands related to key bindings are as follows:
 .Op Fl nr
 .Op Fl N Ar note
 .Op Fl T Ar key-table
-.Ar key Ar command Op Ar arguments
+.Ar key command Op Ar arguments
 .Xc
 .D1 (alias: Ic bind )
 Bind key
@@ -4353,6 +4353,10 @@ gives
 .Ql #{t:window_activity}
 gives
 .Ql Sun Oct 25 09:25:02 2015 .
+Adding
+.Ql p (
+.Ql `t/p` )
+will use shorter but less accurate time format for times in the past.
 The
 .Ql b:\&
 and
@@ -4459,7 +4463,8 @@ The following variables are available, where appropriate:
 .It Li "client_readonly" Ta "" Ta "1 if client is readonly"
 .It Li "client_session" Ta "" Ta "Name of the client's session"
 .It Li "client_termname" Ta "" Ta "Terminal name of client"
-.It Li "client_termfeatures" Ta "" Ta "Terminal features of client"
+.It Li "client_termtype" Ta "" Ta "Terminal type of client, if available"
+.It Li "client_termfeatures" Ta "" Ta "Terminal features of client, if any"
 .It Li "client_tty" Ta "" Ta "Pseudo terminal of client"
 .It Li "client_utf8" Ta "" Ta "1 if client supports UTF-8"
 .It Li "client_width" Ta "" Ta "Width of client"
@@ -4657,7 +4662,8 @@ for the terminal default colour; or a hexadecimal RGB string such as
 Set the background colour.
 .It Ic none
 Set no attributes (turn off any active attributes).
-.It Xo Ic bright
+.It Xo Ic acs ,
+.Ic bright
 (or
 .Ic bold ) ,
 .Ic dim ,
@@ -4677,6 +4683,8 @@ Set an attribute.
 Any of the attributes may be prefixed with
 .Ql no
 to unset.
+.Ic acs
+is the terminal alternate character set.
 .It Xo Ic align=left
 (or
 .Ic noalign ) ,
@@ -5548,6 +5556,10 @@ It is not normally necessary to set these manually, instead the
 .Ic terminal-features
 option should be used.
 .Bl -tag -width Ds
+.It Em \&AX
+An existing extension that tells
+.Nm
+the terminal supports default colours.
 .It Em \&Cs , Cr
 Set the cursor colour.
 The first takes a single string argument and is used to set the colour;
@@ -5558,6 +5570,21 @@ to change the cursor colour from inside
 .Bd -literal -offset indent
 $ printf '\e033]12;red\e033\e\e'
 .Ed
+.It Em \&Cmg, \&Clmg, \&Dsmg , \&Enmg
+Set, clear, disable or enable DECSLRM margins.
+These are set automatically if the terminal reports it is
+.Em VT420
+compatible.
+.It Em \&Dsbp , \&Enbp
+Disable and enable bracketed paste.
+These are set automatically if the
+.Em XT
+capability is present.
+.It Em \&Dsfcs , \&Enfcs
+Disable and enable focus reporting.
+These are set automatically if the
+.Em XT
+capability is present.
 .It Em \&Smol
 Enable the overline attribute.
 .It Em \&Smulx
@@ -5608,6 +5635,11 @@ See the
 option above and the
 .Xr xterm 1
 man page.
+.It Em \&XT
+This is an existing extension capability that tmux uses to mean that the
+terminal supports the
+.Xr xterm 1
+title set sequences and to automatically set some of the capabilities above.
 .El
 .Sh CONTROL MODE
 .Nm
@@ -5653,7 +5685,7 @@ A notification will never occur inside an output block.
 .Pp
 The following notifications are defined:
 .Bl -tag -width Ds
-.It Ic %client-session-changed Ar client Ar session-id Ar name
+.It Ic %client-session-changed Ar client session-id name
 The client is now attached to the session with ID
 .Ar session-id ,
 which is named
