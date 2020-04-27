@@ -474,7 +474,7 @@ main(int argc, char **argv)
 	s = getenv("EVENT_NOEPOLL");
 	if ((s == NULL) || (*s == '\0') || (strcmp(s, "1") != 0)) {
 		if (setenv("EVENT_NOEPOLL", "1", 1) != 0)
-			fatalx("Fail to setenv EVENT_NOEPOLL");
+			fatal("Fail to setenv EVENT_NOEPOLL");
 	}
 #endif
 
