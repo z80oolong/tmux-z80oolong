@@ -96,10 +96,10 @@ osdep_event_init(void)
 
 #ifndef NO_USE_FIX_NOEPOLL
 	/* Set the environment variable EVENT_NOEPOLL to "1" certainly. */
-	char *s;
+	char *var;
 
-	s = getenv("EVENT_NOEPOLL");
-	if ((s == NULL) || (*s == '\0') || (strcmp(s, "1") != 0)) {
+	var = getenv("EVENT_NOEPOLL");
+	if ((var == NULL) || (*var == '\0') || (strcmp(var, "1") != 0)) {
 		log_debug("The environment variable EVENT_NOEPOLL is setting to `1`.");
 		if (setenv("EVENT_NOEPOLL", "1", 1) != 0)
 			fatal("Fail to set the environment variable EVENT_NOEPOLL.");
