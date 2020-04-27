@@ -469,15 +469,6 @@ main(int argc, char **argv)
 	socket_path = path;
 	free(label);
 
-#ifndef NO_USE_FIX_NOEPOLL
-	/* set environment variable EVENT_NOEPOLL to "1" certainly. */
-	s = getenv("EVENT_NOEPOLL");
-	if ((s == NULL) || (*s == '\0') || (strcmp(s, "1") != 0)) {
-		if (setenv("EVENT_NOEPOLL", "1", 1) != 0)
-			fatal("Fail to setenv EVENT_NOEPOLL");
-	}
-#endif
-
 	/* Pass control to the client. */
 	exit(client_main(osdep_event_init(), argc, argv, flags, feat));
 }
