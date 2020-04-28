@@ -99,19 +99,16 @@ osdep_event_init(void)
 	char *var;
 
 	var = getenv("EVENT_NOEPOLL");
-	log_debug("The environment variable EVENT_NOEPOLL is `%s` (%p)", var, var);
-	if ((var == NULL) || (*var == '\0') || (strcmp(var, "1") != 0)) {
-		if (setenv("EVENT_NOEPOLL", "1", 1) != 0)
-			err(1, "Fail to set the environment variable EVENT_NOEPOLL.");
-	} else {
-		log_debug("The environment variable EVENT_NOEPOLL is set `1`.");
-	}
+	if ((var == NULL) || (*var == '\0') || (strcmp(var, "1") != 0))
+		err(1, "The environment variable EVENT_NOEPOLL is `%s` (%p), isn't `1`.", var, var);
 #else
 	/* On Linux, epoll doesn't work on /dev/null (yes, really). */
 	setenv("EVENT_NOEPOLL", "1", 1);
 #endif
 
 	base = event_init();
+#ifdef NO_USE_FIX_NOEPOLL
 	unsetenv("EVENT_NOEPOLL");
+#endif
 	return (base);
 }
