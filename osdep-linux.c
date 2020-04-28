@@ -94,21 +94,10 @@ osdep_event_init(void)
 {
 	struct event_base	*base;
 
-#ifndef NO_USE_FIX_NOEPOLL
-	/* Set the environment variable EVENT_NOEPOLL to "1" certainly. */
-	char *var;
-
-	var = getenv("EVENT_NOEPOLL");
-	if ((var == NULL) || (*var == '\0') || (strcmp(var, "1") != 0))
-		err(1, "The environment variable EVENT_NOEPOLL is `%s` (%p), isn't `1`.", var, var);
-#else
 	/* On Linux, epoll doesn't work on /dev/null (yes, really). */
 	setenv("EVENT_NOEPOLL", "1", 1);
-#endif
 
 	base = event_init();
-#ifdef NO_USE_FIX_NOEPOLL
 	unsetenv("EVENT_NOEPOLL");
-#endif
 	return (base);
 }
