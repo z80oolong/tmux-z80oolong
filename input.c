@@ -1859,8 +1859,10 @@ input_csi_dispatch_winops(struct input_ctx *ictx)
 			case 0:
 			case 2:
 				screen_pop_title(sctx->s);
-				if (wp != NULL)
+				if (wp != NULL) {
+					server_redraw_window_borders(wp->window);
 					server_status_window(wp->window);
+				}
 				break;
 			}
 			break;
@@ -2251,8 +2253,10 @@ input_exit_osc(struct input_ctx *ictx)
 	switch (option) {
 	case 0:
 	case 2:
-		if (screen_set_title(sctx->s, p) && wp != NULL)
-			server_status_window(ictx->wp->window);
+		if (screen_set_title(sctx->s, p) && wp != NULL) {
+			server_redraw_window_borders(wp->window);
+			server_status_window(wp->window);
+		}
 		break;
 	case 4:
 		input_osc_4(ictx, p);
@@ -2260,8 +2264,10 @@ input_exit_osc(struct input_ctx *ictx)
 	case 7:
 		if (utf8_isvalid(p)) {
 			screen_set_path(sctx->s, p);
-			if (wp != NULL)
+			if (wp != NULL) {
+				server_redraw_window_borders(wp->window);
 				server_status_window(wp->window);
+			}
 		}
 		break;
 	case 10:
@@ -2312,8 +2318,10 @@ input_exit_apc(struct input_ctx *ictx)
 		return;
 	log_debug("%s: \"%s\"", __func__, ictx->input_buf);
 
-	if (screen_set_title(sctx->s, ictx->input_buf) && wp != NULL)
+	if (screen_set_title(sctx->s, ictx->input_buf) && wp != NULL) {
+		server_redraw_window_borders(wp->window);
 		server_status_window(wp->window);
+	}
 }
 
 /* Rename string started. */
@@ -2353,6 +2361,7 @@ input_exit_rename(struct input_ctx *ictx)
 	}
 	window_set_name(wp->window, ictx->input_buf);
 	options_set_number(wp->window->options, "automatic-rename", 0);
+	server_redraw_window_borders(wp->window);
 	server_status_window(wp->window);
 }
 
@@ -2484,7 +2493,6 @@ input_osc_10(struct input_ctx *ictx, const char *p)
 {
 	struct window_pane	*wp = ictx->wp;
 	u_int			 r, g, b;
-	char			 tmp[16];
 
 	if (wp == NULL)
 		return;
@@ -2493,9 +2501,7 @@ input_osc_10(struct input_ctx *ictx, const char *p)
 
 	if (!input_osc_parse_colour(p, &r, &g, &b))
 		goto bad;
-	xsnprintf(tmp, sizeof tmp, "fg=#%02x%02x%02x", r, g, b);
-	options_set_style(wp->options, "window-style", 1, tmp);
-	options_set_style(wp->options, "window-active-style", 1, tmp);
+	wp->fg = colour_join_rgb(r, g, b);
 	wp->flags |= (PANE_REDRAW|PANE_STYLECHANGED);
 
 	return;
@@ -2510,7 +2516,6 @@ input_osc_11(struct input_ctx *ictx, const char *p)
 {
 	struct window_pane	*wp = ictx->wp;
 	u_int			 r, g, b;
-	char			 tmp[16];
 
 	if (wp == NULL)
 		return;
@@ -2519,9 +2524,7 @@ input_osc_11(struct input_ctx *ictx, const char *p)
 
 	if (!input_osc_parse_colour(p, &r, &g, &b))
 	    goto bad;
-	xsnprintf(tmp, sizeof tmp, "bg=#%02x%02x%02x", r, g, b);
-	options_set_style(wp->options, "window-style", 1, tmp);
-	options_set_style(wp->options, "window-active-style", 1, tmp);
+	wp->bg = colour_join_rgb(r, g, b);
 	wp->flags |= (PANE_REDRAW|PANE_STYLECHANGED);
 
 	return;

@@ -872,6 +872,9 @@ window_pane_create(struct window *w, u_int sx, u_int sy, u_int hlimit)
 	wp->fd = -1;
 	wp->event = NULL;
 
+	wp->fg = 8;
+	wp->bg = 8;
+
 	TAILQ_INIT(&wp->modes);
 
 	wp->layout_cell = NULL;
@@ -1106,6 +1109,7 @@ window_pane_set_mode(struct window_pane *wp, struct window_pane *swp,
 	wp->screen = wme->screen;
 	wp->flags |= (PANE_REDRAW|PANE_CHANGED);
 
+	server_redraw_window_borders(wp->window);
 	server_status_window(wp->window);
 	notify_pane("pane-mode-changed", wp);
 
@@ -1137,6 +1141,7 @@ window_pane_reset_mode(struct window_pane *wp)
 	}
 	wp->flags |= (PANE_REDRAW|PANE_CHANGED);
 
+	server_redraw_window_borders(wp->window);
 	server_status_window(wp->window);
 	notify_pane("pane-mode-changed", wp);
 }
