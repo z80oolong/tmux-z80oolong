@@ -57,7 +57,11 @@ struct mouse_event;
 struct options;
 struct options_array_item;
 struct options_entry;
+struct screen_write_collect_item;
+struct screen_write_collect_line;
+struct screen_write_ctx;
 struct session;
+struct tty_ctx;
 struct tmuxpeer;
 struct tmuxproc;
 struct winlink;
@@ -788,12 +792,15 @@ struct screen {
 };
 
 /* Screen write context. */
-struct screen_write_collect_item;
-struct screen_write_collect_line;
+typedef void (*screen_write_init_ctx_cb)(struct screen_write_ctx *,
+    struct tty_ctx *);
 struct screen_write_ctx {
 	struct window_pane	*wp;
 	struct screen		*s;
 	int			 sync;
+
+	screen_write_init_ctx_cb init_ctx_cb;
+	void			*arg;
 
 	struct screen_write_collect_item *item;
 	u_int			 scrolled;
@@ -1254,8 +1261,6 @@ struct tty {
 	struct termios	 tio;
 
 	struct grid_cell cell;
-
-	int		 last_wp;
 	struct grid_cell last_cell;
 
 #define TTY_NOCURSOR 0x1
@@ -1287,8 +1292,14 @@ struct tty {
 };
 
 /* TTY command context. */
+typedef void (*tty_ctx_redraw_cb)(const struct tty_ctx *);
+typedef int (*tty_ctx_set_client_cb)(struct tty_ctx *, struct client *);
 struct tty_ctx {
-	struct window_pane	*wp;
+	struct screen		*s;
+
+	tty_ctx_redraw_cb	 redraw_cb;
+	tty_ctx_set_client_cb	 set_client_cb;
+	void			*arg;
 
 	const struct grid_cell	*cell;
 	int			 wrapped;
@@ -1307,19 +1318,27 @@ struct tty_ctx {
 	u_int		 orupper;
 	u_int		 orlower;
 
-	/* Pane offset. */
+	/* Target region (usually pane) offset and size. */
 	u_int		 xoff;
 	u_int		 yoff;
+	u_int		 rxoff;
+	u_int		 ryoff;
+	u_int		 sx;
+	u_int		 sy;
 
 	/* The background colour used for clearing (erasing). */
 	u_int		 bg;
 
-	/* Window offset and size. */
+	/* The default colours and palette. */
+	struct grid_cell defaults;
+	int		*palette;
+
+	/* Containing region (usually window) offset and size. */
 	int		 bigger;
-	u_int		 ox;
-	u_int		 oy;
-	u_int		 sx;
-	u_int		 sy;
+	u_int		 wox;
+	u_int		 woy;
+	u_int		 wsx;
+	u_int		 wsy;
 };
 
 /* Saved message entry. */
@@ -1492,7 +1511,7 @@ RB_HEAD(client_files, client_file);
 typedef int (*prompt_input_cb)(struct client *, void *, const char *, int);
 typedef void (*prompt_free_cb)(void *);
 typedef int (*overlay_check_cb)(struct client *, u_int, u_int);
-typedef int (*overlay_mode_cb)(struct client *, u_int *, u_int *);
+typedef struct screen *(*overlay_mode_cb)(struct client *, u_int *, u_int *);
 typedef void (*overlay_draw_cb)(struct client *, struct screen_redraw_ctx *);
 typedef int (*overlay_key_cb)(struct client *, struct key_event *);
 typedef void (*overlay_free_cb)(struct client *);
@@ -1604,6 +1623,8 @@ struct client {
 #define PROMPT_INCREMENTAL 0x4
 #define PROMPT_NOFORMAT 0x8
 #define PROMPT_KEY 0x10
+#define PROMPT_WINDOW 0x20
+#define PROMPT_TARGET 0x40
 	int		 prompt_flags;
 
 	struct session	*session;
@@ -1806,6 +1827,7 @@ void		 paste_free(struct paste_buffer *);
 void		 paste_add(const char *, char *, size_t);
 int		 paste_rename(const char *, const char *, char **);
 int		 paste_set(char *, size_t, const char *, char **);
+void		 paste_replace(struct paste_buffer *, char *, size_t);
 char		*paste_make_sample(struct paste_buffer *);
 
 /* format.c */
@@ -1966,7 +1988,7 @@ void	tty_update_window_offset(struct window *);
 void	tty_update_client_offset(struct client *);
 void	tty_raw(struct tty *, const char *);
 void	tty_attributes(struct tty *, const struct grid_cell *,
-	    struct window_pane *);
+	    const struct grid_cell *, int *);
 void	tty_reset(struct tty *);
 void	tty_region_off(struct tty *);
 void	tty_margin_off(struct tty *);
@@ -1989,8 +2011,8 @@ void	tty_send_requests(struct tty *);
 void	tty_stop_tty(struct tty *);
 void	tty_set_title(struct tty *, const char *);
 void	tty_update_mode(struct tty *, int, struct screen *);
-void	tty_draw_line(struct tty *, struct window_pane *, struct screen *,
-	    u_int, u_int, u_int, u_int, u_int);
+void	tty_draw_line(struct tty *, struct screen *, u_int, u_int, u_int,
+	    u_int, u_int, const struct grid_cell *, int *);
 void	tty_sync_start(struct tty *);
 void	tty_sync_end(struct tty *);
 int	tty_open(struct tty *, char **);
@@ -2021,6 +2043,7 @@ void	tty_cmd_reverseindex(struct tty *, const struct tty_ctx *);
 void	tty_cmd_setselection(struct tty *, const struct tty_ctx *);
 void	tty_cmd_rawstring(struct tty *, const struct tty_ctx *);
 void	tty_cmd_syncstart(struct tty *, const struct tty_ctx *);
+void	tty_default_colours(struct grid_cell *, struct window_pane *);
 
 /* tty-term.c */
 extern struct tty_terms tty_terms;
@@ -2339,8 +2362,8 @@ void	 input_reset(struct input_ctx *, int);
 struct evbuffer *input_pending(struct input_ctx *);
 void	 input_parse_pane(struct window_pane *);
 void	 input_parse_buffer(struct window_pane *, u_char *, size_t);
-void	 input_parse_screen(struct input_ctx *, struct screen *, u_char *,
-	     size_t);
+void	 input_parse_screen(struct input_ctx *, struct screen *,
+	     screen_write_init_ctx_cb, void *, u_char *, size_t);
 
 /* input-key.c */
 int	 input_key_pane(struct window_pane *, key_code, struct mouse_event *);
@@ -2423,8 +2446,11 @@ char	*grid_view_string_cells(struct grid *, u_int, u_int, u_int);
 /* screen-write.c */
 void	 screen_write_make_list(struct screen *);
 void	 screen_write_free_list(struct screen *);
-void	 screen_write_start(struct screen_write_ctx *, struct window_pane *,
-	     struct screen *);
+void	 screen_write_start_pane(struct screen_write_ctx *,
+	     struct window_pane *, struct screen *);
+void	 screen_write_start(struct screen_write_ctx *, struct screen *);
+void	 screen_write_start_callback(struct screen_write_ctx *, struct screen *,
+	     screen_write_init_ctx_cb, void *);
 void	 screen_write_stop(struct screen_write_ctx *);
 void	 screen_write_reset(struct screen_write_ctx *);
 size_t printflike(1, 2) screen_write_strlen(const char *, ...);
@@ -2478,6 +2504,10 @@ void	 screen_write_collect_add(struct screen_write_ctx *,
 void	 screen_write_cell(struct screen_write_ctx *, const struct grid_cell *);
 void	 screen_write_setselection(struct screen_write_ctx *, u_char *, u_int);
 void	 screen_write_rawstring(struct screen_write_ctx *, u_char *, u_int);
+void	 screen_write_alternateon(struct screen_write_ctx *,
+	     struct grid_cell *, int);
+void	 screen_write_alternateoff(struct screen_write_ctx *,
+	     struct grid_cell *, int);
 
 /* screen-redraw.c */
 void	 screen_redraw_screen(struct client *);
@@ -2566,10 +2596,6 @@ struct window_pane *window_pane_find_by_id_str(const char *);
 struct window_pane *window_pane_find_by_id(u_int);
 int		 window_pane_destroy_ready(struct window_pane *);
 void		 window_pane_resize(struct window_pane *, u_int, u_int);
-void		 window_pane_alternate_on(struct window_pane *,
-		     struct grid_cell *, int);
-void		 window_pane_alternate_off(struct window_pane *,
-		     struct grid_cell *, int);
 void		 window_pane_set_palette(struct window_pane *, u_int, int);
 void		 window_pane_unset_palette(struct window_pane *, u_int);
 void		 window_pane_reset_palette(struct window_pane *);
@@ -2814,12 +2840,14 @@ int		 menu_display(struct menu *, int, struct cmdq_item *, u_int,
 #define POPUP_WRITEKEYS 0x1
 #define POPUP_CLOSEEXIT 0x2
 #define POPUP_CLOSEEXITZERO 0x4
+typedef void (*popup_close_cb)(int, void *);
 u_int		 popup_width(struct cmdq_item *, u_int, const char **,
 		    struct client *, struct cmd_find_state *);
 u_int		 popup_height(u_int, const char **);
 int		 popup_display(int, struct cmdq_item *, u_int, u_int, u_int,
 		    u_int, u_int, const char **, const char *, const char *,
-		    const char *, struct client *, struct cmd_find_state *);
+		    const char *, struct client *, struct cmd_find_state *,
+		    popup_close_cb, void *);
 
 /* style.c */
 int		 style_parse(struct style *,const struct grid_cell *,
