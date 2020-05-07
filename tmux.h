@@ -1343,11 +1343,13 @@ struct tty_ctx {
 
 /* Saved message entry. */
 struct message_entry {
-	char	*msg;
-	u_int	 msg_num;
-	time_t	 msg_time;
-	TAILQ_ENTRY(message_entry) entry;
+	char				*msg;
+	u_int				 msg_num;
+	struct timeval			 msg_time;
+
+	TAILQ_ENTRY(message_entry)	 entry;
 };
+TAILQ_HEAD(message_list, message_entry);
 
 /* Parsed arguments structures. */
 struct args_entry;
@@ -1570,7 +1572,7 @@ struct client {
 #define CLIENT_CONTROLCONTROL 0x4000
 #define CLIENT_FOCUSED 0x8000
 #define CLIENT_UTF8 0x10000
-/* 0x20000 unused */
+#define CLIENT_IGNORESIZE 0x20000
 #define CLIENT_IDENTIFIED 0x40000
 #define CLIENT_STATUSFORCE 0x80000
 #define CLIENT_DOUBLECLICK 0x100000
@@ -1605,8 +1607,6 @@ struct client {
 
 	char		*message_string;
 	struct event	 message_timer;
-	u_int		 message_next;
-	TAILQ_HEAD(, message_entry) message_log;
 
 	char		*prompt_string;
 	struct utf8_data *prompt_buffer;
@@ -1848,6 +1848,8 @@ void		 format_free(struct format_tree *);
 void		 format_merge(struct format_tree *, struct format_tree *);
 void printflike(3, 4) format_add(struct format_tree *, const char *,
 		     const char *, ...);
+void		 format_add_tv(struct format_tree *, const char *,
+		     struct timeval *);
 void		 format_each(struct format_tree *, void (*)(const char *,
 		     const char *, void *), void *);
 char		*format_expand_time(struct format_tree *, const char *);
@@ -2090,6 +2092,8 @@ char		*args_print(struct args *);
 char		*args_escape(const char *);
 int		 args_has(struct args *, u_char);
 const char	*args_get(struct args *, u_char);
+u_char		 args_first(struct args *, struct args_entry **);
+u_char		 args_next(struct args_entry **);
 const char	*args_first_value(struct args *, u_char, struct args_value **);
 const char	*args_next_value(struct args_value **);
 long long	 args_strtonum(struct args *, u_char, long long, long long,
@@ -2163,7 +2167,7 @@ char		*cmd_template_replace(const char *, const char *, int);
 
 /* cmd-attach-session.c */
 enum cmd_retval	 cmd_attach_session(struct cmdq_item *, const char *, int, int,
-		     int, const char *, int);
+		     int, const char *, int, const char *);
 
 /* cmd-parse.c */
 void		 cmd_parse_empty(struct cmd_parse_input *);
@@ -2269,6 +2273,7 @@ void	 file_push(struct client_file *);
 extern struct tmuxproc *server_proc;
 extern struct clients clients;
 extern struct cmd_find_state marked_pane;
+extern struct message_list message_log;
 void	 server_set_marked(struct session *, struct winlink *,
 	     struct window_pane *);
 void	 server_clear_marked(void);
@@ -2278,6 +2283,7 @@ int	 server_check_marked(void);
 int	 server_start(struct tmuxproc *, int, struct event_base *, int, char *);
 void	 server_update_socket(void);
 void	 server_add_accept(int);
+void printflike(1, 2) server_add_message(const char *, ...);
 
 /* server-client.c */
 u_int	 server_client_how_many(void);
@@ -2299,9 +2305,9 @@ void	 server_client_exec(struct client *, const char *);
 void	 server_client_loop(void);
 void	 server_client_push_stdout(struct client *);
 void	 server_client_push_stderr(struct client *);
-void printflike(2, 3) server_client_add_message(struct client *, const char *,
-	     ...);
 const char *server_client_get_cwd(struct client *, struct session *);
+void	 server_client_set_flags(struct client *, const char *);
+const char *server_client_get_flags(struct client *);
 
 /* server-fn.c */
 void	 server_redraw_client(struct client *);
@@ -2525,8 +2531,7 @@ void	 screen_set_path(struct screen *, const char *);
 void	 screen_push_title(struct screen *);
 void	 screen_pop_title(struct screen *);
 void	 screen_resize(struct screen *, u_int, u_int, int);
-void	 screen_resize_cursor(struct screen *, u_int, u_int, int, int, u_int *,
-	     u_int *);
+void	 screen_resize_cursor(struct screen *, u_int, u_int, int, int, int);
 void	 screen_set_selection(struct screen *, u_int, u_int, u_int, u_int,
 	     u_int, int, struct grid_cell *);
 void	 screen_clear_selection(struct screen *);
