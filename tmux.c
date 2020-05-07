@@ -471,8 +471,10 @@ main(int argc, char **argv)
 	free(label);
 
 #ifndef NO_USE_FIX_NOEPOLL
+#ifdef __linux__
 	/* Set the environment variable EVENT_NOEPOLL to "1" certainly. */
 	environ_set(global_environ, "EVENT_NOEPOLL", 0, "%d", 1);
+#endif
 #endif
 
 	/* Pass control to the client. */
