@@ -947,6 +947,7 @@ The following commands are available to manage clients and sessions:
 .It Xo Ic attach-session
 .Op Fl dErx
 .Op Fl c Ar working-directory
+.Op Fl f Ar flags
 .Op Fl t Ar target-session
 .Xc
 .D1 (alias: Ic attach )
@@ -964,12 +965,30 @@ is given, send
 .Dv SIGHUP
 to the parent process of the client as well as
 detaching the client, typically causing it to exit.
+.Fl f
+sets a comma-separated list of client flags.
+The flags are:
+.Bl -tag -width Ds
+.It read-only
+the client is read-only
+.It ignore-size
+the client does not affect the size of other clients
+.It no-output
+the client does not receive pane output in control mode
+.El
+.Pp
+A leading
+.Ql !
+turns a flag off if the client is already attached.
 .Fl r
-signifies the client is read-only (only keys bound to the
+is an alias for
+.Fl f
+.Ar read-only,ignore-size .
+When a client is read-only, only keys bound to the
 .Ic detach-client
 or
 .Ic switch-client
-commands have any effect)
+commands have any effect.
 .Pp
 If no server is started,
 .Ic attach-session
@@ -1095,6 +1114,7 @@ Lock all clients attached to
 .Op Fl AdDEPX
 .Op Fl c Ar start-directory
 .Op Fl e Ar environment
+.Op Fl f Ar flags
 .Op Fl F Ar format
 .Op Fl n Ar window-name
 .Op Fl s Ar session-name
@@ -1132,6 +1152,9 @@ or
 is given, the
 .Ic default-size
 option is set for the session.
+.Fl f
+sets a comma-separated list of client flags (see
+.Ic attach-session ) .
 .Pp
 If run from a terminal, any
 .Xr termios 4
@@ -1209,7 +1232,7 @@ specified multiple times.
 .It Xo Ic refresh-client
 .Op Fl cDlLRSU
 .Op Fl C Ar XxY
-.Op Fl F Ar flags
+.Op Fl f Ar flags
 .Op Fl t Ar target-client
 .Op Ar adjustment
 .Xc
@@ -1252,12 +1275,10 @@ window, changing the current window in the attached session will reset
 it.
 .Pp
 .Fl C
-sets the width and height of a control client and
-.Fl F
-sets a comma-separated list of flags.
-Currently the only flag available is
-.Ql no-output
-to disable receiving pane output.
+sets the width and height of a control client.
+.Fl f
+sets a comma-separated list of client flags, see
+.Ic attach-session .
 .Pp
 .Fl l
 requests the clipboard from the client using the
@@ -1290,15 +1311,10 @@ Rename the session to
 .Op Fl t Ar target-client
 .Xc
 .D1 (alias: Ic showmsgs )
-Show client messages or server information.
-Any messages displayed on the status line are saved in a per-client message
-log, up to a maximum of the limit set by the
+Show server messages or information.
+Messages are stored, up to a maximum of the limit set by the
 .Ar message-limit
 server option.
-With
-.Fl t ,
-display the log for
-.Ar target-client .
 .Fl J
 and
 .Fl T
@@ -1377,7 +1393,11 @@ or
 is used, the client is moved to the last, next or previous session
 respectively.
 .Fl r
-toggles whether a client is read-only (see the
+toggles the client
+.Ic read-only
+and
+.Ic ignore-size
+flags (see the
 .Ic attach-session
 command).
 .Pp
@@ -1878,6 +1898,10 @@ The following keys may be used in tree mode:
 .It Li "Enter" Ta "Choose selected item"
 .It Li "Up" Ta "Select previous item"
 .It Li "Down" Ta "Select next item"
+.It Li "+" Ta "Expand selected item"
+.It Li "-" Ta "Collapse selected item"
+.It Li "M-+" Ta "Expand all items"
+.It Li "M--" Ta "Collapse all items"
 .It Li "x" Ta "Kill selected item"
 .It Li "X" Ta "Kill tagged items"
 .It Li "<" Ta "Scroll list of previews left"
@@ -4480,6 +4504,7 @@ The following variables are available, where appropriate:
 .It Li "client_control_mode" Ta "" Ta "1 if client is in control mode"
 .It Li "client_created" Ta "" Ta "Time client created"
 .It Li "client_discarded" Ta "" Ta "Bytes discarded when client behind"
+.It Li "client_flags" Ta "" Ta "List of client flags"
 .It Li "client_height" Ta "" Ta "Height of client"
 .It Li "client_key_table" Ta "" Ta "Current key table"
 .It Li "client_last_session" Ta "" Ta "Name of the client's last session"
@@ -4553,7 +4578,7 @@ The following variables are available, where appropriate:
 .It Li "pane_marked" Ta "" Ta "1 if this is the marked pane"
 .It Li "pane_marked_set" Ta "" Ta "1 if a marked pane is set"
 .It Li "pane_mode" Ta "" Ta "Name of pane mode, if any"
-.It Li "pane_path" Ta "#T" Ta "Path of pane (can be set by application)"
+.It Li "pane_path" Ta "" Ta "Path of pane (can be set by application)"
 .It Li "pane_pid" Ta "" Ta "PID of first process in pane"
 .It Li "pane_pipe" Ta "" Ta "1 if pane is being piped"
 .It Li "pane_right" Ta "" Ta "Right of pane"
