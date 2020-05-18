@@ -318,7 +318,6 @@ tty_acs_needed(struct tty *tty)
 const char *
 tty_acs_get(struct tty *tty, u_char ch)
 {
-<<<<<<< HEAD
 #ifndef NO_USE_PANE_BORDER_ACS_ASCII
 	switch (tty_acs_type(tty)) {
 	case ACST_UTF8:
@@ -337,10 +336,7 @@ tty_acs_get(struct tty *tty, u_char ch)
 		return (&tty_acs_ascii_table[ch][0]);
 	return (NULL);
 #else
-	struct tty_acs_entry	*entry;
-=======
 	const struct tty_acs_entry	*entry;
->>>>>>> upstream
 
 	/* Use the ACS set instead of UTF-8 if needed. */
 	if (tty_acs_needed(tty)) {
