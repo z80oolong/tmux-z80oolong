@@ -100,8 +100,6 @@ static char tty_acs_ascii_table[UCHAR_MAX][2] = {
 	['x'] = "|",	/* vertical line		ACS_VLINE	*/
 };
 #else
-static int	tty_acs_cmp(const void *, const void *);
-
 /* Table mapping ACS entries to UTF-8. */
 struct tty_acs_entry {
 	u_char	 	 key;
@@ -358,6 +356,29 @@ tty_acs_get(struct tty *tty, u_char ch)
 int
 tty_acs_reverse_get(__unused struct tty *tty, const char *s, size_t slen)
 {
+#ifndef NO_USE_PANE_BOARDER_ACS_ASCII
+	int ch;
+	switch (tty_acs_type(tty)) {
+	case ACST_UTF8:
+		for(ch = 0; ch < UCHAR_MAX; ch++)
+			if (strncmp(&tty_acs_table[ch][0], s, slen) == 0)
+				return ch;
+		break;
+	case ACST_ACS:
+		for(ch = 0; ch <= UCHAR_MAX; ch++)
+			if (strncmp(&tty->term->acs[ch][0], s, slen) == 0)
+				return ch;
+		break;
+	case ACST_ASCII:
+		break;
+	}
+
+	for(ch = 0; ch < UCHAR_MAX; ch++)
+		if (strncmp(&tty_acs_ascii_table[ch][0], s, slen) == 0)
+			return ch;
+		break;
+	return (-1);
+#else
 	const struct tty_acs_reverse_entry	*table, *entry;
 	u_int					 items;
 
@@ -373,4 +394,5 @@ tty_acs_reverse_get(__unused struct tty *tty, const char *s, size_t slen)
 	if (entry == NULL)
 		return (-1);
 	return (entry->key);
+#endif
 }
