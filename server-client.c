@@ -31,8 +31,9 @@
 #include "tmux.h"
 
 static void	server_client_free(int, short, void *);
-static void	server_client_check_focus(struct window_pane *);
-static void	server_client_check_resize(struct window_pane *);
+static void	server_client_check_pane_focus(struct window_pane *);
+static void	server_client_check_pane_resize(struct window_pane *);
+static void	server_client_check_window_resize(struct window *);
 static key_code	server_client_check_mouse(struct client *, struct key_event *);
 static void	server_client_repeat_timer(int, short, void *);
 static void	server_client_click_timer(int, short, void *);
@@ -53,6 +54,19 @@ static void	server_client_dispatch_read_data(struct client *,
 		    struct imsg *);
 static void	server_client_dispatch_read_done(struct client *,
 		    struct imsg *);
+
+/* Compare client windows. */
+static int
+server_client_window_cmp(struct client_window *cw1,
+    struct client_window *cw2)
+{
+	if (cw1->window < cw2->window)
+		return (-1);
+	if (cw1->window > cw2->window)
+		return (1);
+	return (0);
+}
+RB_GENERATE(client_windows, client_window, entry, server_client_window_cmp);
 
 /* Number of attached clients. */
 u_int
@@ -209,9 +223,9 @@ server_client_create(int fd)
 	c->cwd = NULL;
 
 	c->queue = cmdq_new();
+	RB_INIT(&c->windows);
 
 	c->tty.fd = -1;
-
 	c->tty.sx = 80;
 	c->tty.sy = 24;
 
@@ -236,11 +250,22 @@ server_client_create(int fd)
 int
 server_client_open(struct client *c, char **cause)
 {
+	const char	*ttynam = _PATH_TTY;
+
 	if (c->flags & CLIENT_CONTROL)
 		return (0);
 
-	if (strcmp(c->ttyname, "/dev/tty") == 0) {
-		*cause = xstrdup("can't use /dev/tty");
+	if (strcmp(c->ttyname, ttynam) == 0||
+	    ((isatty(STDIN_FILENO) &&
+	    (ttynam = ttyname(STDIN_FILENO)) != NULL &&
+	    strcmp(c->ttyname, ttynam) == 0) ||
+	    (isatty(STDOUT_FILENO) &&
+	    (ttynam = ttyname(STDOUT_FILENO)) != NULL &&
+	    strcmp(c->ttyname, ttynam) == 0) ||
+	    (isatty(STDERR_FILENO) &&
+	    (ttynam = ttyname(STDERR_FILENO)) != NULL &&
+	    strcmp(c->ttyname, ttynam) == 0))) {
+		xasprintf(cause, "can't use %s", c->ttyname);
 		return (-1);
 	}
 
@@ -259,7 +284,8 @@ server_client_open(struct client *c, char **cause)
 void
 server_client_lost(struct client *c)
 {
-	struct client_file	*cf;
+	struct client_file	*cf, *cf1;
+	struct client_window	*cw, *cw1;
 
 	c->flags |= CLIENT_DEAD;
 
@@ -267,9 +293,13 @@ server_client_lost(struct client *c)
 	status_prompt_clear(c);
 	status_message_clear(c);
 
-	RB_FOREACH(cf, client_files, &c->files) {
+	RB_FOREACH_SAFE(cf, client_files, &c->files, cf1) {
 		cf->error = EINTR;
 		file_fire_done(cf);
+	}
+	RB_FOREACH_SAFE(cw, client_windows, &c->windows, cw1) {
+		RB_REMOVE(client_windows, &c->windows, cw);
+		free(cw);
 	}
 
 	TAILQ_REMOVE(&clients, c, entry);
@@ -1004,14 +1034,14 @@ have_event:
 out:
 	/* Apply modifiers if any. */
 	if (b & MOUSE_MASK_META)
-		key |= KEYC_ESCAPE;
+		key |= KEYC_META;
 	if (b & MOUSE_MASK_CTRL)
 		key |= KEYC_CTRL;
 	if (b & MOUSE_MASK_SHIFT)
 		key |= KEYC_SHIFT;
 
 	if (log_get_level() != 0)
-		log_debug("mouse key is %s", key_string_lookup_key (key));
+		log_debug("mouse key is %s", key_string_lookup_key (key, 1));
 	return (key);
 }
 
@@ -1114,7 +1144,7 @@ server_client_key_callback(struct cmdq_item *item, void *data)
 
 	/* Find affected pane. */
 	if (!KEYC_IS_MOUSE(key) || cmd_find_from_mouse(&fs, m, 0) != 0)
-		cmd_find_from_session(&fs, s, 0);
+		cmd_find_from_client(&fs, c, 0);
 	wp = fs.wp;
 
 	/* Forward mouse keys if disabled. */
@@ -1143,7 +1173,7 @@ table_changed:
 	 * The prefix always takes precedence and forces a switch to the prefix
 	 * table, unless we are already there.
 	 */
-	key0 = (key & ~KEYC_XTERM);
+	key0 = (key & (KEYC_MASK_KEY|KEYC_MASK_MODIFIERS));
 	if ((key0 == (key_code)options_get_number(s->options, "prefix") ||
 	    key0 == (key_code)options_get_number(s->options, "prefix2")) &&
 	    strcmp(table->name, "prefix") != 0) {
@@ -1310,10 +1340,13 @@ server_client_loop(void)
 	struct client		*c;
 	struct window		*w;
 	struct window_pane	*wp;
-	struct winlink		*wl;
-	struct session		*s;
-	int			 focus, attached, resize;
+	int			 focus;
 
+	/* Check for window resize. This is done before redrawing. */
+	RB_FOREACH(w, windows, &windows)
+		server_client_check_window_resize(w);
+
+	/* Check clients. */
 	TAILQ_FOREACH(c, &clients, entry) {
 		server_client_check_exit(c);
 		if (c->session != NULL) {
@@ -1325,39 +1358,39 @@ server_client_loop(void)
 	/*
 	 * Any windows will have been redrawn as part of clients, so clear
 	 * their flags now. Also check pane focus and resize.
-	 *
-	 * As an optimization, panes in windows that are in an attached session
-	 * but not the current window are not resized (this reduces the amount
-	 * of work needed when, for example, resizing an X terminal a
-	 * lot). Windows in no attached session are resized immediately since
-	 * that is likely to have come from a command like split-window and be
-	 * what the user wanted.
 	 */
 	focus = options_get_number(global_options, "focus-events");
 	RB_FOREACH(w, windows, &windows) {
-		attached = resize = 0;
-		TAILQ_FOREACH(wl, &w->winlinks, wentry) {
-			s = wl->session;
-			if (s->attached != 0)
-				attached = 1;
-			if (s->attached != 0 && s->curw == wl) {
-				resize = 1;
-				break;
-			}
-		}
-		if (!attached)
-			resize = 1;
 		TAILQ_FOREACH(wp, &w->panes, entry) {
 			if (wp->fd != -1) {
 				if (focus)
-					server_client_check_focus(wp);
-				if (resize)
-					server_client_check_resize(wp);
+					server_client_check_pane_focus(wp);
+				server_client_check_pane_resize(wp);
 			}
 			wp->flags &= ~PANE_REDRAW;
 		}
 		check_window_name(w);
 	}
+}
+
+/* Check if window needs to be resized. */
+static void
+server_client_check_window_resize(struct window *w)
+{
+	struct winlink	*wl;
+
+	if (~w->flags & WINDOW_RESIZE)
+		return;
+
+	TAILQ_FOREACH(wl, &w->winlinks, wentry) {
+		if (wl->session->attached != 0 && wl->session->curw == wl)
+			break;
+	}
+	if (wl == NULL)
+		return;
+
+	log_debug("%s: resizing window @%u", __func__, w->id);
+	resize_window(w, w->new_sx, w->new_sy, w->new_xpixel, w->new_ypixel);
 }
 
 /* Check if we need to force a resize. */
@@ -1441,7 +1474,7 @@ server_client_resize_event(__unused int fd, __unused short events, void *data)
 
 /* Check if pane should be resized. */
 static void
-server_client_check_resize(struct window_pane *wp)
+server_client_check_pane_resize(struct window_pane *wp)
 {
 	if (~wp->flags & PANE_RESIZE)
 		return;
@@ -1459,7 +1492,7 @@ server_client_check_resize(struct window_pane *wp)
 
 /* Check whether pane should be focused. */
 static void
-server_client_check_focus(struct window_pane *wp)
+server_client_check_pane_focus(struct window_pane *wp)
 {
 	struct client	*c;
 	int		 push;
@@ -1523,7 +1556,7 @@ server_client_reset_state(struct client *c)
 {
 	struct tty		*tty = &c->tty;
 	struct window		*w = c->session->curw->window;
-	struct window_pane	*wp = w->active, *loop;
+	struct window_pane	*wp = server_client_get_pane(c), *loop;
 	struct screen		*s = NULL;
 	struct options		*oo = c->session->options;
 	int			 mode = 0, cursor, flags;
@@ -2228,6 +2261,8 @@ server_client_set_flags(struct client *c, const char *flags)
 			flag = CLIENT_READONLY;
 		else if (strcmp(next, "ignore-size") == 0)
 			flag = CLIENT_IGNORESIZE;
+		else if (strcmp(next, "active-pane") == 0)
+			flag = CLIENT_ACTIVEPANE;
 		else
 			continue;
 
@@ -2241,7 +2276,7 @@ server_client_set_flags(struct client *c, const char *flags)
 
 }
 
-/*Get client flags. This is only flags useful to show to users. */
+/* Get client flags. This is only flags useful to show to users. */
 const char *
 server_client_get_flags(struct client *c)
 {
@@ -2258,6 +2293,8 @@ server_client_get_flags(struct client *c)
 		strlcat(s, "no-output,", sizeof s);
 	if (c->flags & CLIENT_READONLY)
 		strlcat(s, "read-only,", sizeof s);
+	if (c->flags & CLIENT_ACTIVEPANE)
+		strlcat(s, "active-pane,", sizeof s);
 	if (c->flags & CLIENT_SUSPENDED)
 		strlcat(s, "suspended,", sizeof s);
 	if (c->flags & CLIENT_UTF8)
@@ -2265,4 +2302,68 @@ server_client_get_flags(struct client *c)
 	if (*s != '\0')
 		s[strlen(s) - 1] = '\0';
 	return (s);
+}
+
+/* Get client window. */
+static struct client_window *
+server_client_get_client_window(struct client *c, u_int id)
+{
+	struct client_window	cw = { .window = id };
+
+	return (RB_FIND(client_windows, &c->windows, &cw));
+}
+
+/* Get client active pane. */
+struct window_pane *
+server_client_get_pane(struct client *c)
+{
+	struct session		*s = c->session;
+	struct client_window	*cw;
+
+	if (s == NULL)
+		return (NULL);
+
+	if (~c->flags & CLIENT_ACTIVEPANE)
+		return (s->curw->window->active);
+	cw = server_client_get_client_window(c, s->curw->window->id);
+	if (cw == NULL)
+		return (s->curw->window->active);
+	return (cw->pane);
+}
+
+/* Set client active pane. */
+void
+server_client_set_pane(struct client *c, struct window_pane *wp)
+{
+	struct session		*s = c->session;
+	struct client_window	*cw;
+
+	if (s == NULL)
+		return;
+
+	cw = server_client_get_client_window(c, s->curw->window->id);
+	if (cw == NULL) {
+		cw = xcalloc(1, sizeof *cw);
+		cw->window = s->curw->window->id;
+		RB_INSERT(client_windows, &c->windows, cw);
+	}
+	cw->pane = wp;
+	log_debug("%s pane now %%%u", c->name, wp->id);
+}
+
+/* Remove pane from client lists. */
+void
+server_client_remove_pane(struct window_pane *wp)
+{
+	struct client		*c;
+	struct window		*w = wp->window;
+	struct client_window	*cw;
+
+	TAILQ_FOREACH(c, &clients, entry) {
+		cw = server_client_get_client_window(c, w->id);
+		if (cw != NULL && cw->pane == wp) {
+			RB_REMOVE(client_windows, &c->windows, cw);
+			free(cw);
+		}
+	}
 }
