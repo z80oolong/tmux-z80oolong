@@ -89,9 +89,8 @@ key_bindings_cmp(struct key_binding *bd1, struct key_binding *bd2)
 }
 
 static void
-key_bindings_free(struct key_table *table, struct key_binding *bd)
+key_bindings_free(struct key_binding *bd)
 {
-	RB_REMOVE(key_bindings, &table->key_bindings, bd);
 	cmd_list_free(bd->cmdlist);
 	free((void *)bd->note);
 	free(bd);
@@ -110,6 +109,7 @@ key_bindings_get_table(const char *name, int create)
 	table = xmalloc(sizeof *table);
 	table->name = xstrdup(name);
 	RB_INIT(&table->key_bindings);
+	RB_INIT(&table->default_key_bindings);
 
 	table->references = 1; /* one reference in key_tables */
 	RB_INSERT(key_tables, &key_tables, table);
@@ -138,8 +138,14 @@ key_bindings_unref_table(struct key_table *table)
 	if (--table->references != 0)
 		return;
 
-	RB_FOREACH_SAFE(bd, key_bindings, &table->key_bindings, bd1)
-		key_bindings_free(table, bd);
+	RB_FOREACH_SAFE(bd, key_bindings, &table->key_bindings, bd1) {
+		RB_REMOVE(key_bindings, &table->key_bindings, bd);
+		key_bindings_free(bd);
+	}
+	RB_FOREACH_SAFE(bd, key_bindings, &table->default_key_bindings, bd1) {
+		RB_REMOVE(key_bindings, &table->default_key_bindings, bd);
+		key_bindings_free(bd);
+	}
 
 	free((void *)table->name);
 	free(table);
@@ -152,6 +158,15 @@ key_bindings_get(struct key_table *table, key_code key)
 
 	bd.key = key;
 	return (RB_FIND(key_bindings, &table->key_bindings, &bd));
+}
+
+struct key_binding *
+key_bindings_get_default(struct key_table *table, key_code key)
+{
+	struct key_binding	bd;
+
+	bd.key = key;
+	return (RB_FIND(key_bindings, &table->default_key_bindings, &bd));
 }
 
 struct key_binding *
@@ -175,9 +190,11 @@ key_bindings_add(const char *name, key_code key, const char *note, int repeat,
 
 	table = key_bindings_get_table(name, 1);
 
-	bd = key_bindings_get(table, key & ~KEYC_XTERM);
-	if (bd != NULL)
-		key_bindings_free(table, bd);
+	bd = key_bindings_get(table, key & ~KEYC_MASK_FLAGS);
+	if (bd != NULL) {
+		RB_REMOVE(key_bindings, &table->key_bindings, bd);
+		key_bindings_free(bd);
+	}
 
 	bd = xcalloc(1, sizeof *bd);
 	bd->key = key;
@@ -200,12 +217,15 @@ key_bindings_remove(const char *name, key_code key)
 	if (table == NULL)
 		return;
 
-	bd = key_bindings_get(table, key & ~KEYC_XTERM);
+	bd = key_bindings_get(table, key & ~KEYC_MASK_FLAGS);
 	if (bd == NULL)
 		return;
-	key_bindings_free(table, bd);
 
-	if (RB_EMPTY(&table->key_bindings)) {
+	RB_REMOVE(key_bindings, &table->key_bindings, bd);
+	key_bindings_free(bd);
+
+	if (RB_EMPTY(&table->key_bindings) &&
+	    RB_EMPTY(&table->default_key_bindings)) {
 		RB_REMOVE(key_tables, &key_tables, table);
 		key_bindings_unref_table(table);
 	}
@@ -226,6 +246,28 @@ key_bindings_remove_table(const char *name)
 		if (c->keytable == table)
 			server_client_set_key_table(c, NULL);
 	}
+}
+
+static enum cmd_retval
+key_bindings_init_done(__unused struct cmdq_item *item, __unused void *data)
+{
+	struct key_table	*table;
+	struct key_binding	*bd, *new_bd;
+
+	RB_FOREACH(table, key_tables, &key_tables) {
+		RB_FOREACH(bd, key_bindings, &table->key_bindings) {
+			new_bd = xcalloc(1, sizeof *bd);
+			new_bd->key = bd->key;
+			if (bd->note != NULL)
+				new_bd->note = xstrdup(bd->note);
+			new_bd->flags = bd->flags;
+			new_bd->cmdlist = bd->cmdlist;
+			new_bd->cmdlist->references++;
+			RB_INSERT(key_bindings, &table->default_key_bindings,
+			    new_bd);
+		}
+	}
+	return (CMD_RETURN_NORMAL);
 }
 
 void
@@ -278,6 +320,7 @@ key_bindings_init(void)
 		"bind -N 'Toggle the marked pane' m select-pane -m",
 		"bind -N 'Select the next window' n next-window",
 		"bind -N 'Select the next pane' o select-pane -t:.+",
+		"bind -N 'Customize options' C customize-mode -Z",
 		"bind -N 'Select the previous pane' p previous-window",
 		"bind -N 'Display pane numbers' q display-panes",
 		"bind -N 'Redraw the current client' r refresh-client",
@@ -383,6 +426,7 @@ key_bindings_init(void)
 		"bind -Tcopy-mode N send -X search-reverse",
 		"bind -Tcopy-mode R send -X rectangle-toggle",
 		"bind -Tcopy-mode T command-prompt -1p'(jump to backward)' 'send -X jump-to-backward \"%%%\"'",
+		"bind -Tcopy-mode X send -X set-mark",
 		"bind -Tcopy-mode f command-prompt -1p'(jump forward)' 'send -X jump-forward \"%%%\"'",
 		"bind -Tcopy-mode g command-prompt -p'(goto line)' 'send -X goto-line \"%%%\"'",
 		"bind -Tcopy-mode n send -X search-again",
@@ -424,6 +468,7 @@ key_bindings_init(void)
 		"bind -Tcopy-mode M-r send -X middle-line",
 		"bind -Tcopy-mode M-v send -X page-up",
 		"bind -Tcopy-mode M-w send -X copy-pipe-and-cancel",
+		"bind -Tcopy-mode M-x send -X jump-to-mark",
 		"bind -Tcopy-mode 'M-{' send -X previous-paragraph",
 		"bind -Tcopy-mode 'M-}' send -X next-paragraph",
 		"bind -Tcopy-mode M-Up send -X halfpage-up",
@@ -478,6 +523,7 @@ key_bindings_init(void)
 		"bind -Tcopy-mode-vi T command-prompt -1p'(jump to backward)' 'send -X jump-to-backward \"%%%\"'",
 		"bind -Tcopy-mode-vi V send -X select-line",
 		"bind -Tcopy-mode-vi W send -X next-space",
+		"bind -Tcopy-mode-vi X send -X set-mark",
 		"bind -Tcopy-mode-vi ^ send -X back-to-indentation",
 		"bind -Tcopy-mode-vi b send -X previous-word",
 		"bind -Tcopy-mode-vi e send -X next-word-end",
@@ -511,6 +557,7 @@ key_bindings_init(void)
 		"bind -Tcopy-mode-vi Down send -X cursor-down",
 		"bind -Tcopy-mode-vi Left send -X cursor-left",
 		"bind -Tcopy-mode-vi Right send -X cursor-right",
+		"bind -Tcopy-mode-vi M-x send -X jump-to-mark",
 		"bind -Tcopy-mode-vi C-Up send -X scroll-up",
 		"bind -Tcopy-mode-vi C-Down send -X scroll-down",
 	};
@@ -524,6 +571,7 @@ key_bindings_init(void)
 		cmdq_append(NULL, cmdq_get_command(pr->cmdlist, NULL));
 		cmd_list_free(pr->cmdlist);
 	}
+	cmdq_append(NULL, cmdq_get_callback(key_bindings_init_done, NULL));
 }
 
 static enum cmd_retval

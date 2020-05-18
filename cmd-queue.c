@@ -522,7 +522,7 @@ cmdq_find_flag(struct cmdq_item *item, struct cmd_find_state *fs,
 	const char	*value;
 
 	if (flag->flag == 0) {
-		cmd_find_clear_state(fs, 0);
+		cmd_find_from_client(fs, item->target_client, 0);
 		return (CMD_RETURN_NORMAL);
 	}
 
@@ -547,7 +547,7 @@ cmdq_add_message(struct cmdq_item *item)
 	if (c != NULL) {
 		name = c->name;
 		if (c->session != NULL && state->event.key != KEYC_NONE) {
-			key = key_string_lookup_key(state->event.key);
+			key = key_string_lookup_key(state->event.key, 0);
 			server_add_message("%s key %s: %s", name, key, tmp);
 		} else
 			server_add_message("%s command: %s", name, tmp);
@@ -609,7 +609,6 @@ cmdq_fire_command(struct cmdq_item *item)
 	retval = cmdq_find_flag(item, &item->target, &entry->target);
 	if (retval == CMD_RETURN_ERROR)
 		goto out;
-
 
 	retval = entry->exec(cmd, item);
 	if (retval == CMD_RETURN_ERROR)
@@ -810,7 +809,7 @@ cmdq_print(struct cmdq_item *item, const char *fmt, ...)
 		}
 		file_print(c, "%s\n", msg);
 	} else {
-		wp = c->session->curw->window->active;
+		wp = server_client_get_pane(c);
 		wme = TAILQ_FIRST(&wp->modes);
 		if (wme == NULL || wme->mode != &window_view_mode) {
 			window_pane_set_mode(wp, NULL, &window_view_mode, NULL,
@@ -856,7 +855,7 @@ cmdq_error(struct cmdq_item *item, const char *fmt, ...)
 		c->retval = 1;
 	} else {
 		*msg = toupper((u_char) *msg);
-		status_message_set(c, "%s", msg);
+		status_message_set(c, 1, "%s", msg);
 	}
 
 	free(msg);

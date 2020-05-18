@@ -180,11 +180,11 @@ dist_tmux_SOURCES = \
 	window-client.c \
 	window-clock.c \
 	window-copy.c \
+	window-customize.c \
 	window-tree.c \
 	window.c \
 	xmalloc.c \
-	xmalloc.h \
-	xterm-keys.c
+	xmalloc.h
 nodist_tmux_SOURCES = osdep-@PLATFORM@.c
 
 # Add compat file for forkpty.
