@@ -19,6 +19,7 @@
 #include <sys/types.h>
 
 #include <stdlib.h>
+#include <string.h>
 
 #include "tmux.h"
 
@@ -145,14 +146,65 @@ static const struct tty_acs_entry tty_acs_table[] = {
 	{ '~', "\302\267" }		/* bullet */
 };
 
+/* Table mapping UTF-8 to ACS entries. */
+struct tty_acs_reverse_entry {
+	const char	*string;
+	u_char		 key;
+};
+static const struct tty_acs_reverse_entry tty_acs_reverse2[] = {
+	{ "\302\267", '~' }
+};
+static const struct tty_acs_reverse_entry tty_acs_reverse3[] = {
+	{ "\342\224\200", 'q' },
+	{ "\342\224\201", 'q' },
+	{ "\342\224\202", 'x' },
+	{ "\342\224\203", 'x' },
+	{ "\342\224\214", 'l' },
+	{ "\342\224\217", 'k' },
+	{ "\342\224\220", 'k' },
+	{ "\342\224\223", 'l' },
+	{ "\342\224\224", 'm' },
+	{ "\342\224\227", 'm' },
+	{ "\342\224\230", 'j' },
+	{ "\342\224\233", 'j' },
+	{ "\342\224\234", 't' },
+	{ "\342\224\243", 't' },
+	{ "\342\224\244", 'u' },
+	{ "\342\224\253", 'u' },
+	{ "\342\224\263", 'w' },
+	{ "\342\224\264", 'v' },
+	{ "\342\224\273", 'v' },
+	{ "\342\224\274", 'n' },
+	{ "\342\225\213", 'n' },
+	{ "\342\225\220", 'q' },
+	{ "\342\225\221", 'x' },
+	{ "\342\225\224", 'l' },
+	{ "\342\225\227", 'k' },
+	{ "\342\225\232", 'm' },
+	{ "\342\225\235", 'j' },
+	{ "\342\225\240", 't' },
+	{ "\342\225\243", 'u' },
+	{ "\342\225\246", 'w' },
+	{ "\342\225\251", 'v' },
+	{ "\342\225\254", 'n' },
+};
+
 static int
 tty_acs_cmp(const void *key, const void *value)
 {
 	const struct tty_acs_entry	*entry = value;
-	u_char				 ch;
+	int				 test = *(u_char *)key;
 
-	ch = *(u_char *) key;
-	return (ch - entry->key);
+	return (test - entry->key);
+}
+
+static int
+tty_acs_reverse_cmp(const void *key, const void *value)
+{
+	const struct tty_acs_reverse_entry	*entry = value;
+	const char				*test = key;
+
+	return (strcmp(test, entry->string));
 }
 #endif  /* NO_USE_PANE_BORDER_ACS_ASCII */
 
@@ -262,10 +314,11 @@ tty_acs_needed(struct tty *tty)
 #endif /* NO_USE_PANE_BORDER_ACS_ASCII */
 }
 
-/* Retrieve ACS to output as a string. */
+/* Retrieve ACS to output as UTF-8. */
 const char *
 tty_acs_get(struct tty *tty, u_char ch)
 {
+<<<<<<< HEAD
 #ifndef NO_USE_PANE_BORDER_ACS_ASCII
 	switch (tty_acs_type(tty)) {
 	case ACST_UTF8:
@@ -285,6 +338,9 @@ tty_acs_get(struct tty *tty, u_char ch)
 	return (NULL);
 #else
 	struct tty_acs_entry	*entry;
+=======
+	const struct tty_acs_entry	*entry;
+>>>>>>> upstream
 
 	/* Use the ACS set instead of UTF-8 if needed. */
 	if (tty_acs_needed(tty)) {
@@ -300,4 +356,25 @@ tty_acs_get(struct tty *tty, u_char ch)
 		return (NULL);
 	return (entry->string);
 #endif /* NO_USE_PANE_BORDER_ACS_ASCII */
+}
+
+/* Reverse UTF-8 into ACS. */
+int
+tty_acs_reverse_get(__unused struct tty *tty, const char *s, size_t slen)
+{
+	const struct tty_acs_reverse_entry	*table, *entry;
+	u_int					 items;
+
+	if (slen == 2) {
+		table = tty_acs_reverse2;
+		items = nitems(tty_acs_reverse2);
+	} else if (slen == 3) {
+		table = tty_acs_reverse3;
+		items = nitems(tty_acs_reverse3);
+	} else
+		return (-1);
+	entry = bsearch(s, table, items, sizeof table[0], tty_acs_reverse_cmp);
+	if (entry == NULL)
+		return (-1);
+	return (entry->key);
 }

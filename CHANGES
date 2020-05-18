@@ -1,5 +1,25 @@
 CHANGES FROM 3.1b TO 3.2
 
+* Add an active-pane client flag (set with attach-session -f, new-session -f
+  or refresh-client -f). This allows a client to have an independent active
+  pane for interactive use (the window client pane is still used for many
+  things however).
+
+* Add a mark to copy mode, this is set with the set-mark command (bound to X)
+  and appears with the entire line shown using copy-mode-mark-style and the
+  marked character in reverse. The jump-to-mark command (bound to M-x) swaps
+  the mark and the cursor positions.
+
+* Add a -D flag to make the tmux server run in the foreground and not as a
+  daemon.
+
+* Do not loop forever in copy mode when search finds an empty match.
+
+* Fix the next-matching-bracket logic when using vi(1) keys.
+
+* Add a customize mode where options may be browsed and changed, includes
+  adding a brief description of each option. Bound to C-b C by default.
+
 * Change message log (C-b ~) so there is one for the server rather than one per
   client and it remains after detach, and make it useful by logging every
   command.
@@ -11,7 +31,7 @@ CHANGES FROM 3.1b TO 3.2
 
   refresh-client -F has become -f (-F stays for backwards compatibility) and
   attach-session and switch-client now have -f flags also. A new format
-  "client_flags" lists the flags and is shown by list-clients by default.
+  client_flags lists the flags and is shown by list-clients by default.
 
   This separates the read-only flag from "ignore size" behaviour (new
   ignore-size) flag - both behaviours are useful in different circumstances.
@@ -51,8 +71,10 @@ CHANGES FROM 3.1b TO 3.2
 * Check if the clear terminfo(5) capability starts with CSI and if so then
   assume the terminal is VT100-like, rather than relying on the XT capability.
 
-* Improve command prompt tab completion and add menus both for strings and for
-  -t and -s (when used without a trailing space).
+* Improve command prompt tab completion and add menus both for strings and -t
+  and -s (when used without a trailing space). command-prompt has additional
+  flags for only completing a window (-W) and a target (-T), allowing C-b ' to
+  only show windows and C-b . only targets.
 
 * Change all the style options to string options so they can support formats.
   Change pane-border-active-style to use this to change the border colour when

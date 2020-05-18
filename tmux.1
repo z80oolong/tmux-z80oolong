@@ -23,7 +23,7 @@
 .Sh SYNOPSIS
 .Nm tmux
 .Bk -words
-.Op Fl 2CluvV
+.Op Fl 2CDluvV
 .Op Fl c Ar shell-command
 .Op Fl f Ar file
 .Op Fl L Ar socket-name
@@ -122,6 +122,17 @@ This option is for compatibility with
 when
 .Nm
 is used as a login shell.
+.It Fl D
+Do not start the
+.Nm
+server as a daemon.
+This also turns the
+.Ic exit-empty
+option off.
+With
+.Fl D ,
+.Ar command
+may not be specified.
 .It Fl f Ar file
 Specify an alternative configuration file.
 By default,
@@ -975,6 +986,8 @@ the client is read-only
 the client does not affect the size of other clients
 .It no-output
 the client does not receive pane output in control mode
+.It active-pane
+the client has an independent active pane
 .El
 .Pp
 A leading
@@ -989,6 +1002,13 @@ When a client is read-only, only keys bound to the
 or
 .Ic switch-client
 commands have any effect.
+A client with the
+.Ar active-pane
+flag allows the active pane to be selected independently of the window's active
+pane used by clients without the flag.
+This only affects the cursor position and commands issued from the client;
+other features such as hooks and styles continue to use the window's active
+pane.
 .Pp
 If no server is started,
 .Ic attach-session
@@ -1544,6 +1564,7 @@ The following commands are supported in copy mode:
 .It Li "jump-reverse" Ta "," Ta ","
 .It Li "jump-to-backward <to>" Ta "T" Ta ""
 .It Li "jump-to-forward <to>" Ta "t" Ta ""
+.It Li "jump-to-mark" Ta "M-x" Ta "M-x"
 .It Li "middle-line" Ta "M" Ta "M-r"
 .It Li "next-matching-bracket" Ta "%" Ta "M-C-f"
 .It Li "next-paragraph" Ta "}" Ta "M-}"
@@ -1574,6 +1595,7 @@ The following commands are supported in copy mode:
 .It Li "search-reverse" Ta "N" Ta "N"
 .It Li "select-line" Ta "V" Ta ""
 .It Li "select-word" Ta "" Ta ""
+.It Li "set-mark" Ta "X" Ta "X"
 .It Li "start-of-line" Ta "0" Ta "C-a"
 .It Li "stop-selection" Ta "" Ta ""
 .It Li "top-line" Ta "H" Ta "M-R"
@@ -1950,6 +1972,53 @@ starts without the preview.
 .Fl G
 includes all sessions in any session groups in the tree rather than only the
 first.
+This command works only if at least one client is attached.
+.It Xo
+.Ic customize-mode
+.Op Fl NZ
+.Op Fl F Ar format
+.Op Fl f Ar filter
+.Op Fl t Ar target-pane
+.Op Ar template
+.Xc
+Put a pane into customize mode, where options and key bindings may be browsed
+and modified from a list.
+Option values in the list are shown for the active pane in the current window.
+.Fl Z
+zooms the pane.
+The following keys may be used in customize mode:
+.Bl -column "Key" "Function" -offset indent
+.It Sy "Key" Ta Sy "Function"
+.It Li "Enter" Ta "Set pane, window, session or global option value"
+.It Li "Up" Ta "Select previous item"
+.It Li "Down" Ta "Select next item"
+.It Li "+" Ta "Expand selected item"
+.It Li "-" Ta "Collapse selected item"
+.It Li "M-+" Ta "Expand all items"
+.It Li "M--" Ta "Collapse all items"
+.It Li "s" Ta "Set option value or key attribute"
+.It Li "S" Ta "Set global option value"
+.It Li "w" Ta "Set window option value, if option is for pane and window"
+.It Li "u" Ta "Unset an option (set to default value if global) or unbind a key"
+.It Li "U" Ta "Unset tagged options and unbind tagged keys"
+.It Li "C-s" Ta "Search by name"
+.It Li "n" Ta "Repeat last search"
+.It Li "t" Ta "Toggle if item is tagged"
+.It Li "T" Ta "Tag no items"
+.It Li "C-t" Ta "Tag all items"
+.It Li "f" Ta "Enter a format to filter items"
+.It Li "v" Ta "Toggle option information"
+.It Li "q" Ta "Exit mode"
+.El
+.Pp
+.Fl f
+specifies an initial filter: the filter is a format - if it evaluates to zero,
+the item in the list is not shown, otherwise it is shown.
+If a filter would lead to an empty list, it is ignored.
+.Fl F
+specifies the format for each item in the tree.
+.Fl N
+starts without the option information.
 This command works only if at least one client is attached.
 .It Xo
 .Ic display-panes
@@ -3156,6 +3225,12 @@ sessions.
 .Op Ic on | off
 .Xc
 If enabled, the server will exit when there are no attached clients.
+.It Xo Ic extended-keys
+.Op Ic on | off
+.Xc
+When enabled, extended keys are requested from the terminal and if supported
+are recognised by
+.Nm .
 .It Xo Ic focus-events
 .Op Ic on | off
 .Xc
@@ -3759,6 +3834,14 @@ see the
 .Sx STYLES
 section.
 .Pp
+.It Ic copy-mode-mark-style Ar style
+Set the style of the line containing the mark in copy mode.
+For how to specify
+.Ar style ,
+see the
+.Sx STYLES
+section.
+.Pp
 .It Ic copy-mode-current-match-style Ar style
 Set the style of the current search match in copy mode.
 For how to specify
@@ -3846,6 +3929,28 @@ but set the starting index for pane numbers.
 .Pp
 .It Ic pane-border-format Ar format
 Set the text shown in pane border status lines.
+.Pp
+.It Ic pane-border-lines Ar type
+Set the type of characters used for drawing pane borders.
+.Ar type
+may be one of:
+.Bl -tag -width Ds
+.It single
+single lines using ACS or UTF-8 characters
+.It double
+double lines using UTF-8 characters
+.It heavy
+heavy lines using UTF-8 characters
+.It simple
+simple ASCII characters
+.It number
+the pane number
+.El
+.Pp
+.Ql double
+and
+.Ql heavy
+will fall back to standard ACS line drawing when UTF-8 is not supported.
 .Pp
 .It Xo Ic pane-border-status
 .Op Ic off | top | bottom
@@ -3955,16 +4060,6 @@ option.
 .Xc
 If this option is set, searches will wrap around the end of the pane contents.
 The default is on.
-.Pp
-.It Xo Ic xterm-keys
-.Op Ic on | off
-.Xc
-If this option is set,
-.Nm
-will generate
-.Xr xterm 1 -style
-function key sequences; these have a number included to indicate modifiers such
-as Shift, Alt or Ctrl.
 .El
 .Pp
 Available pane options are:
@@ -5655,6 +5750,8 @@ Disable and enable bracketed paste.
 These are set automatically if the
 .Em XT
 capability is present.
+.It Em \&Dseks , \&Eneks
+Disable and enable extended keys.
 .It Em \&Dsfcs , \&Enfcs
 Disable and enable focus reporting.
 These are set automatically if the

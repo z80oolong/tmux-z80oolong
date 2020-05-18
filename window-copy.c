@@ -131,6 +131,7 @@ static void	window_copy_rectangle_toggle(struct window_mode_entry *);
 static void	window_copy_move_mouse(struct mouse_event *);
 static void	window_copy_drag_update(struct client *, struct mouse_event *);
 static void	window_copy_drag_release(struct client *, struct mouse_event *);
+static void	window_copy_jump_to_mark(struct window_mode_entry *);
 
 const struct window_mode window_copy_mode = {
 	.name = "copy-mode",
@@ -253,6 +254,10 @@ struct window_copy_mode_data {
 
 	u_int		 lastcx; 	/* position in last line w/ content */
 	u_int		 lastsx;	/* size of last line w/ content */
+
+	u_int		 mx;		/* mark position */
+	u_int		 my;
+	int		 showmark;
 
 	int		 searchtype;
 	int		 searchregex;
@@ -424,6 +429,9 @@ window_copy_init(struct window_mode_entry *wme,
 
 	data->screen.cx = data->cx;
 	data->screen.cy = data->cy;
+	data->mx = data->cx;
+	data->my = screen_hsize(data->backing) + data->cy - data->oy;
+	data->showmark = 0;
 
 	screen_write_start(&ctx, &data->screen);
 	for (i = 0; i < screen_size_y(&data->screen); i++)
@@ -448,6 +456,9 @@ window_copy_view_init(struct window_mode_entry *wme,
 
 	data->backing = s = xmalloc(sizeof *data->backing);
 	screen_init(s, screen_size_x(base), screen_size_y(base), UINT_MAX);
+	data->mx = data->cx;
+	data->my = screen_hsize(data->backing) + data->cy - data->oy;
+	data->showmark = 0;
 
 	return (&data->screen);
 }
@@ -1365,9 +1376,9 @@ window_copy_cmd_next_matching_bracket(struct window_copy_cmd_state *cs)
 				px = data->cx;
 				py = screen_hsize(s) + data->cy - data->oy;
 				grid_get_cell(s->grid, px, py, &gc);
-				if (gc.data.size != 1 ||
-				    (gc.flags & GRID_FLAG_PADDING) ||
-				    strchr(close, *gc.data.data) == NULL)
+				if (gc.data.size == 1 &&
+				    (~gc.flags & GRID_FLAG_PADDING) &&
+				    strchr(close, *gc.data.data) != NULL)
 					window_copy_scroll_to(wme, sx, sy);
 				break;
 			}
@@ -1734,6 +1745,17 @@ window_copy_cmd_select_word(struct window_copy_cmd_state *cs)
 }
 
 static enum window_copy_cmd_action
+window_copy_cmd_set_mark(struct window_copy_cmd_state *cs)
+{
+	struct window_copy_mode_data	*data = cs->wme->data;
+
+	data->mx = data->cx;
+	data->my = screen_hsize(data->backing) + data->cy - data->oy;
+	data->showmark = 1;
+	return (WINDOW_COPY_CMD_REDRAW);
+}
+
+static enum window_copy_cmd_action
 window_copy_cmd_start_of_line(struct window_copy_cmd_state *cs)
 {
 	struct window_mode_entry	*wme = cs->wme;
@@ -1874,6 +1896,15 @@ window_copy_cmd_jump_to_forward(struct window_copy_cmd_state *cs)
 		for (; np != 0; np--)
 			window_copy_cursor_jump_to(wme);
 	}
+	return (WINDOW_COPY_CMD_NOTHING);
+}
+
+static enum window_copy_cmd_action
+window_copy_cmd_jump_to_mark(struct window_copy_cmd_state *cs)
+{
+	struct window_mode_entry	*wme = cs->wme;
+
+	window_copy_jump_to_mark(wme);
 	return (WINDOW_COPY_CMD_NOTHING);
 }
 
@@ -2154,6 +2185,8 @@ static const struct {
 	  window_copy_cmd_jump_to_backward },
 	{ "jump-to-forward", 1, 1, 1,
 	  window_copy_cmd_jump_to_forward },
+	{ "jump-to-mark", 0, 0, 0,
+	  window_copy_cmd_jump_to_mark },
 	{ "middle-line", 0, 0, 1,
 	  window_copy_cmd_middle_line },
 	{ "next-matching-bracket", 0, 0, 0,
@@ -2214,6 +2247,8 @@ static const struct {
 	  window_copy_cmd_select_line },
 	{ "select-word", 0, 0, 0,
 	  window_copy_cmd_select_word },
+	{ "set-mark", 0, 0, 0,
+	  window_copy_cmd_set_mark },
 	{ "start-of-line", 0, 0, 1,
 	  window_copy_cmd_start_of_line },
 	{ "stop-selection", 0, 0, 0,
@@ -2445,7 +2480,8 @@ window_copy_search_lr_regex(struct grid *gd, u_int *ppx, u_int *psx, u_int py,
 		len += gd->sx;
 	}
 
-	if (regexec(reg, buf, 1, &regmatch, eflags) == 0) {
+	if (regexec(reg, buf, 1, &regmatch, eflags) == 0 &&
+	    regmatch.rm_so != regmatch.rm_eo) {
 		foundx = first;
 		foundy = py;
 		window_copy_cstrtocellpos(gd, len, &foundx, &foundy,
@@ -2547,6 +2583,8 @@ window_copy_last_regex(struct grid *gd, u_int py, u_int first, u_int last,
 	foundy = py;
 	oldx = first;
 	while (regexec(preg, buf + px, 1, &regmatch, eflags) == 0) {
+		if (regmatch.rm_so == regmatch.rm_eo)
+			break;
 		window_copy_cstrtocellpos(gd, len, &foundx, &foundy,
 		    buf + px + regmatch.rm_so);
 		if (foundy > py || foundx >= last)
@@ -3126,11 +3164,26 @@ window_copy_match_at_cursor(struct window_copy_mode_data *data)
 static void
 window_copy_update_style(struct window_mode_entry *wme, u_int fx, u_int fy,
     struct grid_cell *gc, const struct grid_cell *mgc,
-    const struct grid_cell *cgc)
+    const struct grid_cell *cgc, const struct grid_cell *mkgc)
 {
 	struct window_copy_mode_data	*data = wme->data;
 	u_int				 mark, start, end, cy, cursor, current;
 	u_int				 sx = screen_size_x(data->backing);
+	int				 inv = 0;
+
+	if (data->showmark && fy == data->my) {
+		gc->attr = mkgc->attr;
+		if (fx == data->mx)
+			inv = 1;
+		if (inv) {
+			gc->fg = mkgc->bg;
+			gc->bg = mkgc->fg;
+		}
+		else {
+			gc->fg = mkgc->fg;
+			gc->bg = mkgc->bg;
+		}
+	}
 
 	if (data->searchmark == NULL)
 		return;
@@ -3147,21 +3200,34 @@ window_copy_update_style(struct window_mode_entry *wme, u_int fx, u_int fy,
 		window_copy_match_start_end(data, cursor, &start, &end);
 		if (current >= start && current <= end) {
 			gc->attr = cgc->attr;
-			gc->fg = cgc->fg;
-			gc->bg = cgc->bg;
+			if (inv) {
+				gc->fg = cgc->bg;
+				gc->bg = cgc->fg;
+			}
+			else {
+				gc->fg = cgc->fg;
+				gc->bg = cgc->bg;
+			}
 			return;
 		}
 	}
 
 	gc->attr = mgc->attr;
-	gc->fg = mgc->fg;
-	gc->bg = mgc->bg;
+	if (inv) {
+		gc->fg = mgc->bg;
+		gc->bg = mgc->fg;
+	}
+	else {
+		gc->fg = mgc->fg;
+		gc->bg = mgc->bg;
+	}
 }
 
 static void
 window_copy_write_one(struct window_mode_entry *wme,
     struct screen_write_ctx *ctx, u_int py, u_int fy, u_int nx,
-    const struct grid_cell *mgc, const struct grid_cell *cgc)
+    const struct grid_cell *mgc, const struct grid_cell *cgc,
+    const struct grid_cell *mkgc)
 {
 	struct window_copy_mode_data	*data = wme->data;
 	struct grid			*gd = data->backing->grid;
@@ -3172,7 +3238,8 @@ window_copy_write_one(struct window_mode_entry *wme,
 	for (fx = 0; fx < nx; fx++) {
 		grid_get_cell(gd, fx, fy, &gc);
 		if (fx + gc.data.width <= nx) {
-			window_copy_update_style(wme, fx, fy, &gc, mgc, cgc);
+			window_copy_update_style(wme, fx, fy, &gc, mgc, cgc,
+			    mkgc);
 			screen_write_cell(ctx, &gc);
 		}
 	}
@@ -3186,7 +3253,7 @@ window_copy_write_line(struct window_mode_entry *wme,
 	struct window_copy_mode_data	*data = wme->data;
 	struct screen			*s = &data->screen;
 	struct options			*oo = wp->window->options;
-	struct grid_cell		 gc, mgc, cgc;
+	struct grid_cell		 gc, mgc, cgc, mkgc;
 	char				 hdr[512];
 	size_t				 size = 0;
 	u_int				 hsize = screen_hsize(data->backing);
@@ -3197,6 +3264,8 @@ window_copy_write_line(struct window_mode_entry *wme,
 	mgc.flags |= GRID_FLAG_NOPALETTE;
 	style_apply(&cgc, oo, "copy-mode-current-match-style", NULL);
 	cgc.flags |= GRID_FLAG_NOPALETTE;
+	style_apply(&mkgc, oo, "copy-mode-mark-style", NULL);
+	mkgc.flags |= GRID_FLAG_NOPALETTE;
 
 	if (py == 0 && s->rupper < s->rlower && !data->hide_position) {
 		if (data->searchmark == NULL) {
@@ -3230,7 +3299,7 @@ window_copy_write_line(struct window_mode_entry *wme,
 
 	if (size < screen_size_x(s)) {
 		window_copy_write_one(wme, ctx, py, hsize - data->oy + py,
-		    screen_size_x(s) - size, &mgc, &cgc);
+		    screen_size_x(s) - size, &mgc, &cgc, &mkgc);
 	}
 
 	if (py == data->cy && data->cx == screen_size_x(s)) {
@@ -4683,4 +4752,27 @@ window_copy_drag_release(struct client *c, struct mouse_event *m)
 
 	data = wme->data;
 	evtimer_del(&data->dragtimer);
+}
+
+static void
+window_copy_jump_to_mark(struct window_mode_entry *wme)
+{
+	struct window_copy_mode_data	*data = wme->data;
+	u_int				 tmx, tmy;
+
+	tmx = data->cx;
+	tmy = screen_hsize(data->backing) + data->cy - data->oy;
+	data->cx = data->mx;
+	if (data->my < screen_hsize(data->backing)) {
+		data->cy = 0;
+		data->oy = screen_hsize(data->backing) - data->my;
+	} else {
+		data->cy = data->my - screen_hsize(data->backing);
+		data->oy = 0;
+	}
+	data->mx = tmx;
+	data->my = tmy;
+	data->showmark = 1;
+	window_copy_update_selection(wme, 0, 0);
+	window_copy_redraw_screen(wme);
 }
