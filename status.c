@@ -423,7 +423,7 @@ status_redraw(struct client *c)
 
 /* Set a status line message. */
 void
-status_message_set(struct client *c, const char *fmt, ...)
+status_message_set(struct client *c, int ignore_styles, const char *fmt, ...)
 {
 	struct timeval	tv;
 	va_list		ap;
@@ -433,6 +433,7 @@ status_message_set(struct client *c, const char *fmt, ...)
 	status_push_screen(c);
 
 	va_start(ap, fmt);
+	c->message_ignore_styles = ignore_styles;
 	xvasprintf(&c->message_string, fmt, ap);
 	va_end(ap);
 
@@ -515,7 +516,10 @@ status_message_redraw(struct client *c)
 	for (offset = 0; offset < c->tty.sx; offset++)
 		screen_write_putc(&ctx, &gc, ' ');
 	screen_write_cursormove(&ctx, 0, lines - 1, 0);
-	screen_write_nputs(&ctx, len, &gc, "%s", c->message_string);
+	if (c->message_ignore_styles)
+		screen_write_nputs(&ctx, len, &gc, "%s", c->message_string);
+	else
+		format_draw(&ctx, &gc, c->tty.sx, c->message_string, NULL);
 	screen_write_stop(&ctx);
 
 	if (grid_compare(sl->active->grid, old_screen.grid) == 0) {
@@ -528,14 +532,17 @@ status_message_redraw(struct client *c)
 
 /* Enable status line prompt. */
 void
-status_prompt_set(struct client *c, const char *msg, const char *input,
-    prompt_input_cb inputcb, prompt_free_cb freecb, void *data, int flags)
+status_prompt_set(struct client *c, struct cmd_find_state *fs,
+    const char *msg, const char *input, prompt_input_cb inputcb,
+    prompt_free_cb freecb, void *data, int flags)
 {
 	struct format_tree	*ft;
 	char			*tmp, *cp;
 
-	ft = format_create(c, NULL, FORMAT_NONE, 0);
-	format_defaults(ft, c, NULL, NULL, NULL);
+	if (fs != NULL)
+		ft = format_create_from_state(NULL, c, fs);
+	else
+		ft = format_create_defaults(NULL, c, NULL, NULL, NULL);
 
 	if (input == NULL)
 		input = "";
@@ -820,7 +827,7 @@ status_prompt_translate_key(struct client *c, key_code key, key_code *new_key)
 		return (1);
 	case 'b':
 	case 'B':
-		*new_key = 'b'|KEYC_ESCAPE;
+		*new_key = 'b'|KEYC_META;
 		return (1);
 	case 'd':
 		*new_key = '\025';
@@ -829,7 +836,7 @@ status_prompt_translate_key(struct client *c, key_code key, key_code *new_key)
 	case 'E':
 	case 'w':
 	case 'W':
-		*new_key = 'f'|KEYC_ESCAPE;
+		*new_key = 'f'|KEYC_META;
 		return (1);
 	case 'p':
 		*new_key = '\031'; /* C-y */
@@ -1016,7 +1023,7 @@ status_prompt_key(struct client *c, key_code key)
 	int			 keys;
 
 	if (c->prompt_flags & PROMPT_KEY) {
-		keystring = key_string_lookup_key(key);
+		keystring = key_string_lookup_key(key, 0);
 		c->prompt_inputcb(c, c->prompt_data, keystring, 1);
 		status_prompt_clear(c);
 		return (0);
@@ -1032,7 +1039,7 @@ status_prompt_key(struct client *c, key_code key)
 		free(s);
 		return (1);
 	}
-	key &= ~KEYC_XTERM;
+	key &= ~KEYC_MASK_FLAGS;
 
 	keys = options_get_number(c->session->options, "status-keys");
 	if (keys == MODEKEY_VI) {
@@ -1151,7 +1158,7 @@ process_key:
 		c->prompt_index = idx;
 
 		goto changed;
-	case 'f'|KEYC_ESCAPE:
+	case 'f'|KEYC_META:
 	case KEYC_RIGHT|KEYC_CTRL:
 		ws = options_get_string(oo, "word-separators");
 
@@ -1175,7 +1182,7 @@ process_key:
 			c->prompt_index--;
 
 		goto changed;
-	case 'b'|KEYC_ESCAPE:
+	case 'b'|KEYC_META:
 	case KEYC_LEFT|KEYC_CTRL:
 		ws = options_get_string(oo, "word-separators");
 
