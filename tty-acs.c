@@ -358,6 +358,7 @@ tty_acs_reverse_get(__unused struct tty *tty, const char *s, size_t slen)
 {
 #ifndef NO_USE_PANE_BOARDER_ACS_ASCII
 	int ch;
+
 	switch (tty_acs_type(tty)) {
 	case ACST_UTF8:
 		for(ch = 0; ch < UCHAR_MAX; ch++)
@@ -376,7 +377,7 @@ tty_acs_reverse_get(__unused struct tty *tty, const char *s, size_t slen)
 	for(ch = 0; ch < UCHAR_MAX; ch++)
 		if (strncmp(&tty_acs_ascii_table[ch][0], s, slen) == 0)
 			return ch;
-		break;
+
 	return (-1);
 #else
 	const struct tty_acs_reverse_entry	*table, *entry;
