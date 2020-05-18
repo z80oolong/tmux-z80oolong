@@ -69,6 +69,10 @@ struct winlink;
 /* Client-server protocol version. */
 #define PROTOCOL_VERSION 8
 
+#ifdef NO_USE_UTF8CJK
+#define NO_USE_UTF8CJK_EMOJI
+#endif
+
 /* Default configuration files and socket paths. */
 #ifndef TMUX_CONF
 #define TMUX_CONF "/etc/tmux.conf:~/.tmux.conf"
