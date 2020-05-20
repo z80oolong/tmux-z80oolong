@@ -1075,6 +1075,15 @@ const struct options_table_entry options_table[] = {
 	  .scope = OPTIONS_TABLE_SERVER,
 	  .default_num = 1
 	},
+
+#ifndef NO_USE_UTF8CJK_EMOJI
+	/* UTF8 Emoji charactor options. */
+	{ .name = "utf8-emoji",
+	  .type = OPTIONS_TABLE_FLAG,
+	  .scope = OPTIONS_TABLE_SERVER,
+	  .default_num = 1
+	},
+#endif
 #endif
 
 	/* Hook options. */

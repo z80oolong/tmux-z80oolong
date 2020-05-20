@@ -340,7 +340,13 @@ int mk_wcswidth_cjk(const wchar_t *pwcs, size_t n)
 
 #ifndef NO_USE_UTF8CJK_EMOJI
 /* The following function returns 1 if wide charactor code ucs is
- * Unicode Emoji charactors.
+ * The following functions are the same as mk_wcwidth_cjk() and
+ * mk_wcswidth_cjk(), except that spacing characters in the "Emoji"
+ * characters as defined in Unicode have a column width of 2.
+ * This function is based on the following vim-jp issue,
+ * by Mr.mattn <https://github.com/mattn>.
+ *
+ * https://github.com/vim-jp/issues/issues/1086
  */
 int mk_wcwidth_cjk_emoji(wchar_t ucs)
 {
@@ -508,7 +514,10 @@ utf8_width(wchar_t wc)
 #ifndef NO_USE_UTF8CJK
 	if (options_get_number(global_options, "utf8-cjk")) {
 #ifndef NO_USE_UTF8CJK_EMOJI
-		width = mk_wcwidth_cjk_emoji(wc);
+		if (options_get_number(global_options, "utf8-emoji"))
+			width = mk_wcwidth_cjk_emoji(wc);
+		else
+			width = mk_wcwidth_cjk(wc);
 #else
 		width = mk_wcwidth_cjk(wc);
 #endif

@@ -462,8 +462,14 @@ main(int argc, char **argv)
 #ifndef NO_USE_UTF8CJK
 	if (!strncmp(ctype, "ja", 2) || !strncmp(ctype, "ko", 2) || !strncmp(ctype, "zh", 2)) {
 		options_set_number(global_options, "utf8-cjk", 1);
+#ifndef NO_USE_UTF8CJK_EMOJI
+		options_set_number(global_options, "utf8-emoji", 1);
+#endif
 	} else {
 		options_set_number(global_options, "utf8-cjk", 0);
+#ifndef NO_USE_UTF8CJK_EMOJI
+		options_set_number(global_options, "utf8-emoji", 0);
+#endif
 	}
 #endif
 	/*
