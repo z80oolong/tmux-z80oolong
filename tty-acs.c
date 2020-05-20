@@ -26,7 +26,7 @@
 #ifndef NO_USE_PANE_BORDER_ACS_ASCII
 #include <string.h>
 
-static char tty_acs_table[UCHAR_MAX][4] = {
+static const char tty_acs_table[UCHAR_MAX][4] = {
 	['+'] = "\342\206\222",	/* arrow pointing right */
 	[','] = "\342\206\220",	/* arrow pointing left */
 	['-'] = "\342\206\221",	/* arrow pointing up */
@@ -40,7 +40,7 @@ static char tty_acs_table[UCHAR_MAX][4] = {
 	['e'] = "\342\220\212",
 	['f'] = "\302\260",	/* degree symbol */
 	['g'] = "\302\261",	/* plus/minus */
-	['h'] = "\342\220\244",	/* board of squares	ACS_BOARD	*/
+	['h'] = "\342\220\244",
 	['i'] = "\342\220\213",
 	['j'] = "\342\224\230",	/* lower right corner */
 	['k'] = "\342\224\220",	/* upper right corner */
@@ -59,10 +59,10 @@ static char tty_acs_table[UCHAR_MAX][4] = {
 	['x'] = "\342\224\202",	/* vertical line */
 	['y'] = "\342\211\244",	/* less-than-or-equal-to */
 	['z'] = "\342\211\245",	/* greater-than-or-equal-to */
-	['{'] = "\317\200",   	/* greek pi */
+	['{'] = "\317\200",	/* greek pi */
 	['|'] = "\342\211\240",	/* not-equal */
 	['}'] = "\302\243",	/* UK pound sign */
-	['~'] = "\302\267"	/* bullet */
+	['~'] = "\302\267",	/* bullet */
 };
 
 static char tty_acs_ascii_table[UCHAR_MAX][2] = {
@@ -99,6 +99,53 @@ static char tty_acs_ascii_table[UCHAR_MAX][2] = {
 	['k'] = "+",	/* upper right corner		ACS_URCORNER	*/
 	['x'] = "|",	/* vertical line		ACS_VLINE	*/
 };
+
+static int tty_acs_reverse_table[USHRT_MAX][1] = {
+       [0xfb1d] = 0x7e,        /* "\302\267"     = '~' */
+       [0xcd2e] = 0x71,        /* "\342\224\200" = 'q' */
+       [0xcd2f] = 0x71,        /* "\342\224\201" = 'q' */
+       [0xcd30] = 0x78,        /* "\342\224\202" = 'x' */
+       [0xcd31] = 0x78,        /* "\342\224\203" = 'x' */
+       [0xcd3a] = 0x6c,        /* "\342\224\214" = 'l' */
+       [0xcd3d] = 0x6b,        /* "\342\224\217" = 'k' */
+       [0xcd3e] = 0x6b,        /* "\342\224\220" = 'k' */
+       [0xcd41] = 0x6c,        /* "\342\224\223" = 'l' */
+       [0xcd42] = 0x6d,        /* "\342\224\224" = 'm' */
+       [0xcd45] = 0x6d,        /* "\342\224\227" = 'm' */
+       [0xcd46] = 0x6a,        /* "\342\224\230" = 'j' */
+       [0xcd49] = 0x6a,        /* "\342\224\233" = 'j' */
+       [0xcd4a] = 0x74,        /* "\342\224\234" = 't' */
+       [0xcd51] = 0x74,        /* "\342\224\243" = 't' */
+       [0xcd52] = 0x75,        /* "\342\224\244" = 'u' */
+       [0xcd59] = 0x75,        /* "\342\224\253" = 'u' */
+       [0xcd61] = 0x77,        /* "\342\224\263" = 'w' */
+       [0xcd62] = 0x76,        /* "\342\224\264" = 'v' */
+       [0xcd69] = 0x76,        /* "\342\224\273" = 'v' */
+       [0xcd6a] = 0x6e,        /* "\342\224\274" = 'n' */
+       [0xcd4c] = 0x6e,        /* "\342\225\213" = 'n' */
+       [0xcd51] = 0x71,        /* "\342\225\220" = 'q' */
+       [0xcd52] = 0x78,        /* "\342\225\221" = 'x' */
+       [0xcd55] = 0x6c,        /* "\342\225\224" = 'l' */
+       [0xcd58] = 0x6b,        /* "\342\225\227" = 'k' */
+       [0xcd5b] = 0x6d,        /* "\342\225\232" = 'm' */
+       [0xcd5e] = 0x6a,        /* "\342\225\235" = 'j' */
+       [0xcd61] = 0x74,        /* "\342\225\240" = 't' */
+       [0xcd64] = 0x75,        /* "\342\225\243" = 'u' */
+       [0xcd67] = 0x77,        /* "\342\225\246" = 'w' */
+       [0xcd6a] = 0x76,        /* "\342\225\251" = 'v' */
+       [0xcd6d] = 0x6e,        /* "\342\225\254" = 'n' */
+};
+
+static int
+acs_reverse_hash(const char *str, size_t strlen)
+{
+	int result;
+
+	for (result = 0; (strlen > 0) || (*str != '\0'); str++, strlen--)
+		result = 19 * result + ((int)*str);
+
+	return (result & 0xffff);
+}
 #else
 /* Table mapping ACS entries to UTF-8. */
 struct tty_acs_entry {
@@ -359,24 +406,10 @@ tty_acs_reverse_get(__unused struct tty *tty, const char *s, size_t slen)
 #ifndef NO_USE_PANE_BOARDER_ACS_ASCII
 	int ch;
 
-	switch (tty_acs_type(tty)) {
-	case ACST_UTF8:
-		for(ch = 0; ch < UCHAR_MAX; ch++)
-			if (strncmp(&tty_acs_table[ch][0], s, slen) == 0)
-				return ch;
-		break;
-	case ACST_ACS:
-		for(ch = 0; ch <= UCHAR_MAX; ch++)
-			if (strncmp(&tty->term->acs[ch][0], s, slen) == 0)
-				return ch;
-		break;
-	case ACST_ASCII:
-		break;
-	}
-
-	for(ch = 0; ch < UCHAR_MAX; ch++)
-		if (strncmp(&tty_acs_ascii_table[ch][0], s, slen) == 0)
+	if (tty_acs_type(tty) == ACST_UTF8) {
+		if ((ch = tty_acs_reverse_table[acs_reverse_hash(s, slen)][0]) != 0)
 			return ch;
+	}
 
 	return (-1);
 #else
