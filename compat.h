@@ -27,6 +27,10 @@
 #include <termios.h>
 #include <wchar.h>
 
+#ifdef HAVE_UTF8PROC
+#include <utf8proc.h>
+#endif
+
 #ifndef __GNUC__
 #define __attribute__(a)
 #endif

@@ -33,6 +33,7 @@
 static void	server_client_free(int, short, void *);
 static void	server_client_check_pane_focus(struct window_pane *);
 static void	server_client_check_pane_resize(struct window_pane *);
+static void	server_client_check_pane_buffer(struct window_pane *);
 static void	server_client_check_window_resize(struct window *);
 static key_code	server_client_check_mouse(struct client *, struct key_event *);
 static void	server_client_repeat_timer(int, short, void *);
@@ -224,15 +225,12 @@ server_client_create(int fd)
 
 	c->queue = cmdq_new();
 	RB_INIT(&c->windows);
+	RB_INIT(&c->files);
 
-	c->tty.fd = -1;
 	c->tty.sx = 80;
 	c->tty.sy = 24;
 
 	status_init(c);
-
-	RB_INIT(&c->files);
-
 	c->flags |= CLIENT_FOCUSED;
 
 	c->keytable = key_bindings_get_table("root", 1);
@@ -305,10 +303,8 @@ server_client_lost(struct client *c)
 	TAILQ_REMOVE(&clients, c, entry);
 	log_debug("lost client %p", c);
 
-	/*
-	 * If CLIENT_TERMINAL hasn't been set, then tty_init hasn't been called
-	 * and tty_free might close an unrelated fd.
-	 */
+	if (c->flags & CLIENT_CONTROL)
+		control_stop(c);
 	if (c->flags & CLIENT_TERMINAL)
 		tty_free(&c->tty);
 	free(c->ttyname);
@@ -340,6 +336,10 @@ server_client_lost(struct client *c)
 	proc_remove_peer(c->peer);
 	c->peer = NULL;
 
+	if (c->fd != -1) {
+		close(c->fd);
+		c->fd = -1;
+	}
 	server_client_unref(c);
 
 	server_add_accept(0); /* may be more file descriptors now */
@@ -1284,7 +1284,7 @@ forward_key:
 		window_pane_key(wp, c, s, wl, key, m);
 
 out:
-	if (s != NULL)
+	if (s != NULL && key != KEYC_FOCUS_OUT)
 		server_client_update_latest(c);
 	free(event);
 	return (CMD_RETURN_NORMAL);
@@ -1366,6 +1366,7 @@ server_client_loop(void)
 				if (focus)
 					server_client_check_pane_focus(wp);
 				server_client_check_pane_resize(wp);
+				server_client_check_pane_buffer(wp);
 			}
 			wp->flags &= ~PANE_REDRAW;
 		}
@@ -1488,6 +1489,97 @@ server_client_check_pane_resize(struct window_pane *wp)
 		server_client_start_resize_timer(wp);
 	} else
 		log_debug("%s: %%%u timer running", __func__, wp->id);
+}
+
+/* Check pane buffer size. */
+static void
+server_client_check_pane_buffer(struct window_pane *wp)
+{
+	struct evbuffer			*evb = wp->event->input;
+	size_t				 minimum;
+	struct client			*c;
+	struct window_pane_offset	*wpo;
+	int				 off = 1, flag;
+	u_int				 attached_clients = 0;
+
+	/*
+	 * Work out the minimum acknowledged size. This is the most that can be
+	 * removed from the buffer.
+	 */
+	minimum = wp->offset.acknowledged;
+	if (wp->pipe_fd != -1 && wp->pipe_offset.acknowledged < minimum)
+		minimum = wp->pipe_offset.acknowledged;
+	TAILQ_FOREACH(c, &clients, entry) {
+		if (c->session == NULL)
+			continue;
+		attached_clients++;
+
+		if (~c->flags & CLIENT_CONTROL) {
+			off = 0;
+			continue;
+		}
+		wpo = control_pane_offset(c, wp, &flag);
+		if (wpo == NULL) {
+			off = 0;
+			continue;
+		}
+		if (!flag)
+			off = 0;
+
+		log_debug("%s: %s has %zu bytes used, %zu bytes acknowledged "
+		    "for %%%u", __func__, c->name, wpo->used, wpo->acknowledged,
+		    wp->id);
+		if (wpo->acknowledged < minimum)
+			minimum = wpo->acknowledged;
+	}
+	if (attached_clients == 0)
+		off = 0;
+	minimum -= wp->base_offset;
+	if (minimum == 0)
+		goto out;
+
+	/* Drain the buffer. */
+	log_debug("%s: %%%u has %zu minimum (of %zu) bytes acknowledged",
+	    __func__, wp->id, minimum, EVBUFFER_LENGTH(evb));
+	evbuffer_drain(evb, minimum);
+
+	/*
+	 * Adjust the base offset. If it would roll over, all the offsets into
+	 * the buffer need to be adjusted.
+	 */
+	if (wp->base_offset > SIZE_MAX - minimum) {
+		log_debug("%s: %%%u base offset has wrapped", __func__, wp->id);
+		wp->offset.acknowledged -= wp->base_offset;
+		wp->offset.used -= wp->base_offset;
+		if (wp->pipe_fd != -1) {
+			wp->pipe_offset.acknowledged -= wp->base_offset;
+			wp->pipe_offset.used -= wp->base_offset;
+		}
+		TAILQ_FOREACH(c, &clients, entry) {
+			if (c->session == NULL || (~c->flags & CLIENT_CONTROL))
+				continue;
+			wpo = control_pane_offset(c, wp, &flag);
+			if (wpo != NULL && !flag) {
+				wpo->acknowledged -= wp->base_offset;
+				wpo->used -= wp->base_offset;
+			}
+		}
+		wp->base_offset = minimum;
+	} else
+		wp->base_offset += minimum;
+
+out:
+	/*
+	 * If there is data remaining, and there are no clients able to consume
+	 * it, do not read any more. This is true when 1) there are attached
+	 * clients 2) all the clients are control clients 3) all of them have
+	 * either the OFF flag set, or are otherwise not able to accept any
+	 * more data for this pane.
+	 */
+	if (off)
+		bufferevent_disable(wp->event, EV_READ);
+	else
+		bufferevent_enable(wp->event, EV_READ);
 }
 
 /* Check whether pane should be focused. */
@@ -1914,7 +2006,7 @@ server_client_dispatch(struct imsg *imsg, void *arg)
 			break;
 		c->flags &= ~CLIENT_SUSPENDED;
 
-		if (c->tty.fd == -1) /* exited in the meantime */
+		if (c->fd == -1) /* exited in the meantime */
 			break;
 		s = c->session;
 
@@ -2120,11 +2212,9 @@ server_client_dispatch_identify(struct client *c, struct imsg *imsg)
 	if (c->flags & CLIENT_CONTROL) {
 		close(c->fd);
 		c->fd = -1;
-
 		control_start(c);
-		c->tty.fd = -1;
 	} else if (c->fd != -1) {
-		if (tty_init(&c->tty, c, c->fd) != 0) {
+		if (tty_init(&c->tty, c) != 0) {
 			close(c->fd);
 			c->fd = -1;
 		} else {
@@ -2255,15 +2345,18 @@ server_client_set_flags(struct client *c, const char *flags)
 		if (not)
 			next++;
 
-		if (strcmp(next, "no-output") == 0)
-			flag = CLIENT_CONTROL_NOOUTPUT;
-		else if (strcmp(next, "read-only") == 0)
+		flag = 0;
+		if (c->flags & CLIENT_CONTROL) {
+			if (strcmp(next, "no-output") == 0)
+				flag = CLIENT_CONTROL_NOOUTPUT;
+		}
+		if (strcmp(next, "read-only") == 0)
 			flag = CLIENT_READONLY;
 		else if (strcmp(next, "ignore-size") == 0)
 			flag = CLIENT_IGNORESIZE;
 		else if (strcmp(next, "active-pane") == 0)
 			flag = CLIENT_ACTIVEPANE;
-		else
+		if (flag == 0)
 			continue;
 
 		log_debug("client %s set flag %s", c->name, next);
@@ -2271,9 +2364,10 @@ server_client_set_flags(struct client *c, const char *flags)
 			c->flags &= ~flag;
 		else
 			c->flags |= flag;
+		if (flag == CLIENT_CONTROL_NOOUTPUT)
+			control_free_offsets(c);
 	}
 	free(copy);
-
 }
 
 /* Get client flags. This is only flags useful to show to users. */
