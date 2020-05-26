@@ -27,7 +27,6 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <termios.h>
-#include <wchar.h>
 
 #ifdef HAVE_UTEMPTER
 #include <utempter.h>
@@ -47,6 +46,7 @@ struct cmdq_item;
 struct cmdq_list;
 struct cmdq_state;
 struct cmds;
+struct control_state;
 struct environ;
 struct format_job_tree;
 struct format_tree;
@@ -601,12 +601,15 @@ struct msg_write_close {
 #define ALL_MOUSE_MODES (MODE_MOUSE_STANDARD|MODE_MOUSE_BUTTON|MODE_MOUSE_ALL)
 #define MOTION_MOUSE_MODES (MODE_MOUSE_BUTTON|MODE_MOUSE_ALL)
 
+/* A single UTF-8 character. */
+typedef u_int utf8_char;
+
 /*
- * A single UTF-8 character. UTF8_SIZE must be big enough to hold
- * combining characters as well, currently at most five (of three
- * bytes) are supported.
-*/
-#define UTF8_SIZE 18
+ * An expanded UTF-8 character. UTF8_SIZE must be big enough to hold combining
+ * characters as well. It can't be more than 32 bytes without changes to how
+ * characters are stored.
+ */
+#define UTF8_SIZE 21
 struct utf8_data {
 	u_char	data[UTF8_SIZE];
 
@@ -614,7 +617,7 @@ struct utf8_data {
 	u_char	size;
 
 	u_char	width;	/* 0xff if invalid */
-} __packed;
+};
 enum utf8_state {
 	UTF8_MORE,
 	UTF8_DONE,
@@ -668,13 +671,25 @@ enum utf8_state {
 
 /* Grid cell data. */
 struct grid_cell {
-	struct utf8_data	data; /* 21 bytes */
+	struct utf8_data	data;
+	u_short			attr;
+	u_char			flags;
+	int			fg;
+	int			bg;
+	int			us;
+};
+
+/* Grid extended cell entry. */
+struct grid_extd_entry {
+	utf8_char		data;
 	u_short			attr;
 	u_char			flags;
 	int			fg;
 	int			bg;
 	int			us;
 } __packed;
+
+/* Grid cell entry. */
 struct grid_cell_entry {
 	u_char			flags;
 	union {
@@ -695,7 +710,7 @@ struct grid_line {
 	struct grid_cell_entry	*celldata;
 
 	u_int			 extdsize;
-	struct grid_cell	*extddata;
+	struct grid_extd_entry	*extddata;
 
 	int			 flags;
 } __packed;
@@ -902,6 +917,12 @@ struct window_mode_entry {
 	TAILQ_ENTRY (window_mode_entry)	 entry;
 };
 
+/* Offsets into pane buffer. */
+struct window_pane_offset {
+	size_t	used;
+	size_t	acknowledged;
+};
+
 /* Child window structure. */
 struct window_pane {
 	u_int		 id;
@@ -952,6 +973,8 @@ struct window_pane {
 
 	int		 fd;
 	struct bufferevent *event;
+	struct window_pane_offset offset;
+	size_t		 base_offset;
 
 	struct event	 resize_timer;
 
@@ -963,7 +986,7 @@ struct window_pane {
 
 	int		 pipe_fd;
 	struct bufferevent *pipe_event;
-	size_t		 pipe_off;
+	struct window_pane_offset pipe_offset;
 
 	struct screen	*screen;
 	struct screen	 base;
@@ -1280,7 +1303,6 @@ struct tty {
 	u_int		 rleft;
 	u_int		 rright;
 
-	int		 fd;
 	struct event	 event_in;
 	struct evbuffer	*in;
 	struct event	 event_out;
@@ -1561,6 +1583,7 @@ struct client {
 	struct cmdq_list *queue;
 
 	struct client_windows windows;
+	struct control_state *control_state;
 
 	pid_t		 pid;
 	int		 fd;
@@ -1933,7 +1956,6 @@ char		*format_trim_right(const char *, u_int);
 
 /* notify.c */
 void	notify_hook(struct cmdq_item *, const char *);
-void	notify_input(struct window_pane *, const u_char *, size_t);
 void	notify_client(const char *, struct client *);
 void	notify_session(const char *, struct session *);
 void	notify_winlink(const char *, struct winlink *);
@@ -2061,7 +2083,7 @@ void	tty_putc(struct tty *, u_char);
 void	tty_putn(struct tty *, const void *, size_t, u_int);
 void	tty_cell(struct tty *, const struct grid_cell *,
 	    const struct grid_cell *, int *);
-int	tty_init(struct tty *, struct client *, int);
+int	tty_init(struct tty *, struct client *);
 void	tty_resize(struct tty *);
 void	tty_set_size(struct tty *, u_int, u_int, u_int, u_int);
 void	tty_start_tty(struct tty *);
@@ -2690,6 +2712,12 @@ void		 winlink_clear_flags(struct winlink *);
 int		 winlink_shuffle_up(struct session *, struct winlink *);
 int		 window_pane_start_input(struct window_pane *,
 		     struct cmdq_item *, char **);
+void		*window_pane_get_new_data(struct window_pane *,
+		     struct window_pane_offset *, size_t *);
+void		 window_pane_update_used_data(struct window_pane *,
+		     struct window_pane_offset *, size_t, int);
+void		 window_pane_acknowledge_data(struct window_pane *,
+		     struct window_pane_offset *, size_t);
 
 /* layout.c */
 u_int		 layout_count_cells(struct layout_cell *);
@@ -2805,7 +2833,14 @@ char	*parse_window_name(const char *);
 
 /* control.c */
 void	control_start(struct client *);
+void	control_stop(struct client *);
+void	control_set_pane_on(struct client *, struct window_pane *);
+void	control_set_pane_off(struct client *, struct window_pane *);
+struct window_pane_offset *control_pane_offset(struct client *,
+	   struct window_pane *, int *);
+void	control_free_offsets(struct client *);
 void printflike(2, 3) control_write(struct client *, const char *, ...);
+void	control_write_output(struct client *, struct window_pane *);
 
 /* control-notify.c */
 void	control_notify_input(struct client *, struct window_pane *,
@@ -2862,12 +2897,13 @@ u_int		 session_group_attached_count(struct session_group *);
 void		 session_renumber_windows(struct session *);
 
 /* utf8.c */
+utf8_char	 utf8_build_one(char, u_int);
+enum utf8_state	 utf8_from_data(const struct utf8_data *, utf8_char *);
+void		 utf8_to_data(utf8_char, struct utf8_data *);
 void		 utf8_set(struct utf8_data *, u_char);
 void		 utf8_copy(struct utf8_data *, const struct utf8_data *);
 enum utf8_state	 utf8_open(struct utf8_data *, u_char);
 enum utf8_state	 utf8_append(struct utf8_data *, u_char);
-enum utf8_state	 utf8_combine(const struct utf8_data *, wchar_t *);
-enum utf8_state	 utf8_split(wchar_t, struct utf8_data *);
 int		 utf8_isvalid(const char *);
 int		 utf8_strvis(char *, const char *, size_t, int);
 int		 utf8_stravis(char **, const char *, int);
