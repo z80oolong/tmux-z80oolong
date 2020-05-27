@@ -321,7 +321,11 @@ int mk_wcwidth_cjk(wchar_t ucs)
 	       sizeof(ambiguous) / sizeof(struct interval) - 1))
     return 2;
 
+#if 1
+  return wcwidth(ucs);
+#else
   return mk_wcwidth(ucs);
+#endif
 }
 
 
