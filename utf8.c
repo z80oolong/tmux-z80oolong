@@ -659,11 +659,16 @@ utf8_width(struct utf8_data *ud, int *width)
 		*width = mk_wcwidth_cjk(wc);
 #endif
 	} else {
-		*width = wcwidth(wc);
+		*width = mk_wcwidth(wc);
 	}
+	log_debug("UTF-8 %.*s, wcwidth() %d", (int)ud->size, ud->data, *width);
+	if (*width < 0)
+		return (UTF8_ERROR);
+
+	return (UTF8_DONE);
 #else
 	*width = wcwidth(wc);
-#endif
+
 	if (*width >= 0 && *width <= 0xff)
 		return (UTF8_DONE);
 	log_debug("UTF-8 %.*s, wcwidth() %d", (int)ud->size, ud->data, *width);
@@ -683,6 +688,7 @@ utf8_width(struct utf8_data *ud, int *width)
 	}
 #endif
 	return (UTF8_ERROR);
+#endif
 }
 
 /*
