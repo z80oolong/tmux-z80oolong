@@ -504,6 +504,7 @@ enum msgtype {
 	MSG_IDENTIFY_CLIENTPID,
 	MSG_IDENTIFY_CWD,
 	MSG_IDENTIFY_FEATURES,
+	MSG_IDENTIFY_STDOUT,
 
 	MSG_COMMAND = 200,
 	MSG_DETACH,
@@ -973,6 +974,7 @@ struct window_pane {
 
 	int		 fd;
 	struct bufferevent *event;
+
 	struct window_pane_offset offset;
 	size_t		 base_offset;
 
@@ -1587,6 +1589,7 @@ struct client {
 
 	pid_t		 pid;
 	int		 fd;
+	int		 out_fd;
 	struct event	 event;
 	int		 retval;
 
