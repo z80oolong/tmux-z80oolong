@@ -487,6 +487,10 @@ fail:
 	return (UTF8_ERROR);
 }
 
+#ifndef NO_USE_UTF8CJK
+static enum utf8_state utf8_width(struct utf8_data *ud, int *width);
+#endif
+
 /* Get UTF-8 data from character. */
 void
 utf8_to_data(utf8_char uc, struct utf8_data *ud)
