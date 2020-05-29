@@ -444,12 +444,19 @@ utf8_put_item(const char *data, size_t size, u_int *offset)
 	return (0);
 }
 
+#ifndef NO_USE_UTF8CJK
+static enum utf8_state utf8_width(struct utf8_data *ud, int *width);
+#endif
+
 /* Get UTF-8 character from data. */
 enum utf8_state
 utf8_from_data(const struct utf8_data *ud, utf8_char *uc)
 {
 	union utf8_map	 m = { .uc = 0 };
 	u_int		 offset;
+#ifndef NO_USE_UTF8CJK
+	int		 width;
+#endif
 
 	if (ud->width != 1 && ud->width != 2)
 		fatalx("invalid UTF-8 width");
@@ -476,6 +483,11 @@ utf8_from_data(const struct utf8_data *ud, utf8_char *uc)
 		m.data[1] = (offset >> 8) & 0xff;
 		m.data[2] = (offset >> 16);
 	}
+#ifndef NO_USE_UTF8CJK
+	(void)utf8_width(ud, &width);
+	if (width == 2)
+		m.flags |= UTF8_FLAG_WIDTH2;
+#endif
 	*uc = m.uc;
 	return (UTF8_DONE);
 
@@ -487,10 +499,6 @@ fail:
 	return (UTF8_ERROR);
 }
 
-#ifndef NO_USE_UTF8CJK
-static enum utf8_state utf8_width(struct utf8_data *ud, int *width);
-#endif
-
 /* Get UTF-8 data from character. */
 void
 utf8_to_data(utf8_char uc, struct utf8_data *ud)
@@ -498,6 +506,9 @@ utf8_to_data(utf8_char uc, struct utf8_data *ud)
 	union utf8_map		 m = { .uc = uc };
 	struct utf8_item	*ui;
 	u_int			 offset;
+#ifndef NO_USE_UTF8CJK
+	int			 width;
+#endif
 
 	memset(ud, 0, sizeof *ud);
 	ud->size = ud->have = (m.flags & UTF8_FLAG_SIZE);
@@ -509,7 +520,8 @@ utf8_to_data(utf8_char uc, struct utf8_data *ud)
 	if (ud->size <= 3) {
 		memcpy(ud->data, m.data, ud->size);
 #ifndef NO_USE_UTF8CJK
-		(void)utf8_width(ud, &(ud->width));
+		(void)utf8_width(ud, &width);
+		ud->width = width;
 #endif
 		return;
 	}
@@ -522,7 +534,8 @@ utf8_to_data(utf8_char uc, struct utf8_data *ud)
 		memcpy(ud->data, ui->data, ud->size);
 	}
 #ifndef NO_USE_UTF8CJK
-	(void)utf8_width(ud, &(ud->width));
+	(void)utf8_width(ud, width);
+	ud->width = width;
 #endif
 }
 
