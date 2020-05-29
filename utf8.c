@@ -592,6 +592,9 @@ utf8_to_data(utf8_char uc, struct utf8_data *ud)
 
 	if (ud->size <= 3) {
 		memcpy(ud->data, m.data, ud->size);
+#ifndef NO_USE_UTF8CJK
+		(void)utf8_width(ud, &(ud->width));
+#endif
 		return;
 	}
 
@@ -602,6 +605,9 @@ utf8_to_data(utf8_char uc, struct utf8_data *ud)
 		ui = &utf8_list[offset];
 		memcpy(ud->data, ui->data, ud->size);
 	}
+#ifndef NO_USE_UTF8CJK
+	(void)utf8_width(ud, &(ud->width));
+#endif
 }
 
 /* Get UTF-8 character from a single ASCII character. */
@@ -666,13 +672,9 @@ utf8_width(struct utf8_data *ud, int *width)
 		*width = mk_wcwidth(wc);
 	}
 	log_debug("UTF-8 %.*s, wcwidth() %d", (int)ud->size, ud->data, *width);
-	if (*width < 0)
-		return (UTF8_ERROR);
-
-	return (UTF8_DONE);
 #else
 	*width = wcwidth(wc);
-
+#endif
 	if (*width >= 0 && *width <= 0xff)
 		return (UTF8_DONE);
 	log_debug("UTF-8 %.*s, wcwidth() %d", (int)ud->size, ud->data, *width);
@@ -692,7 +694,6 @@ utf8_width(struct utf8_data *ud, int *width)
 	}
 #endif
 	return (UTF8_ERROR);
-#endif
 }
 
 /*
