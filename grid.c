@@ -114,7 +114,11 @@ grid_extended_cell(struct grid_line *gl, struct grid_cell_entry *gce,
 	gl->flags |= GRID_LINE_EXTENDED;
 
 	gee = &gl->extddata[gce->offset];
+#ifndef NO_USE_UTF8CJK
+	utf8_combine(&gc->data, &gee->data);
+#else
 	utf8_from_data(&gc->data, &gee->data);
+#endif
 	gee->attr = gc->attr;
 	gee->flags = flags;
 	gee->fg = gc->fg;
@@ -496,7 +500,11 @@ grid_get_cell1(struct grid_line *gl, u_int px, struct grid_cell *gc)
 			gc->fg = gee->fg;
 			gc->bg = gee->bg;
 			gc->us = gee->us;
+#ifndef NO_USE_UTF8CJK
+			utf8_split(gee->data, &gc->data);
+#else
 			utf8_to_data(gee->data, &gc->data);
+#endif
 		}
 		return;
 	}
@@ -569,8 +577,16 @@ grid_set_cells(struct grid *gd, u_int px, u_int py, const struct grid_cell *gc,
 	for (i = 0; i < slen; i++) {
 		gce = &gl->celldata[px + i];
 		if (grid_need_extended_cell(gce, gc)) {
+#ifndef NO_USE_UTF8CJK
+			struct utf8_data tmp;
+#endif
 			gee = grid_extended_cell(gl, gce, gc);
+#ifndef NO_USE_UTF8CJK
+			utf8_set(&tmp, s[i]);
+			utf8_combine(&tmp, &gee->data);
+#else
 			gee->data = utf8_build_one(s[i], 1);
+#endif
 		} else
 			grid_store_cell(gce, gc, s[i]);
 	}

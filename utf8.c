@@ -321,11 +321,7 @@ int mk_wcwidth_cjk(wchar_t ucs)
 	       sizeof(ambiguous) / sizeof(struct interval) - 1))
     return 2;
 
-#if 1
-  return wcwidth(ucs);
-#else
   return mk_wcwidth(ucs);
-#endif
 }
 
 
@@ -429,8 +425,9 @@ int mk_wcswidth_cjk_emoji(const wchar_t *pwcs, size_t n)
   return width;
 }
 #endif
-#endif
 
+static int	utf8_width(wchar_t);
+#else
 struct utf8_item {
 	u_int			offset;
 	RB_ENTRY(utf8_item)	entry;
@@ -532,19 +529,12 @@ utf8_put_item(const char *data, size_t size, u_int *offset)
 	return (0);
 }
 
-#ifndef NO_USE_UTF8CJK
-static enum utf8_state utf8_width(struct utf8_data *ud, int *width);
-#endif
-
 /* Get UTF-8 character from data. */
 enum utf8_state
 utf8_from_data(const struct utf8_data *ud, utf8_char *uc)
 {
 	union utf8_map	 m = { .uc = 0 };
 	u_int		 offset;
-#ifndef NO_USE_UTF8CJK
-	int		 width;
-#endif
 
 	if (ud->width != 1 && ud->width != 2)
 		fatalx("invalid UTF-8 width");
@@ -571,11 +561,6 @@ utf8_from_data(const struct utf8_data *ud, utf8_char *uc)
 		m.data[1] = (offset >> 8) & 0xff;
 		m.data[2] = (offset >> 16);
 	}
-#ifndef NO_USE_UTF8CJK
-	(void)utf8_width(ud, &width);
-	if (width == 2)
-		m.flags |= UTF8_FLAG_WIDTH2;
-#endif
 	*uc = m.uc;
 	return (UTF8_DONE);
 
@@ -594,9 +579,6 @@ utf8_to_data(utf8_char uc, struct utf8_data *ud)
 	union utf8_map		 m = { .uc = uc };
 	struct utf8_item	*ui;
 	u_int			 offset;
-#ifndef NO_USE_UTF8CJK
-	int			 width;
-#endif
 
 	memset(ud, 0, sizeof *ud);
 	ud->size = ud->have = (m.flags & UTF8_FLAG_SIZE);
@@ -607,10 +589,6 @@ utf8_to_data(utf8_char uc, struct utf8_data *ud)
 
 	if (ud->size <= 3) {
 		memcpy(ud->data, m.data, ud->size);
-#ifndef NO_USE_UTF8CJK
-		(void)utf8_width(ud, &width);
-		ud->width = width;
-#endif
 		return;
 	}
 
@@ -621,10 +599,6 @@ utf8_to_data(utf8_char uc, struct utf8_data *ud)
 		ui = &utf8_list[offset];
 		memcpy(ud->data, ui->data, ud->size);
 	}
-#ifndef NO_USE_UTF8CJK
-	(void)utf8_width(ud, width);
-	ud->width = width;
-#endif
 }
 
 /* Get UTF-8 character from a single ASCII character. */
@@ -637,6 +611,7 @@ utf8_build_one(char c, u_int width)
 		m.flags |= UTF8_FLAG_WIDTH2;
 	return (m.uc);
 }
+#endif
 
 /* Set a single character. */
 void
@@ -661,6 +636,92 @@ utf8_copy(struct utf8_data *to, const struct utf8_data *from)
 }
 
 /* Get width of Unicode character. */
+#ifndef NO_USE_UTF8CJK
+static int
+utf8_width(wchar_t wc)
+{
+	int	width;
+
+	if (options_get_number(global_options, "utf8-cjk")) {
+#ifndef NO_USE_UTF8CJK_EMOJI
+		if (options_get_number(global_options, "utf8-emoji"))
+			width = mk_wcwidth_cjk_emoji(wc);
+		else
+			width = mk_wcwidth_cjk(wc);
+#else
+		width = mk_wcwidth_cjk(wc);
+#endif
+	} else {
+#ifdef HAVE_UTF8PROC
+		width = utf8proc_wcwidth(wc);
+#else
+		width = mk_wcwidth(wc);
+#endif
+	}
+	if (width < 0 || width > 0xff) {
+		log_debug("Unicode %04lx, wcwidth() %d", (long)wc, width);
+
+#ifndef __OpenBSD__
+		/*
+		 * Many platforms (particularly and inevitably OS X) have no
+		 * width for relatively common characters (wcwidth() returns
+		 * -1); assume width 1 in this case. This will be wrong for
+		 * genuinely nonprintable characters, but they should be
+		 * rare. We may pass through stuff that ideally we would block,
+		 * but this is no worse than sending the same to the terminal
+		 * without tmux.
+		 */
+		if (width < 0)
+			return (1);
+#endif
+		return (-1);
+	}
+	return (width);
+}
+
+/* Combine UTF-8 into Unicode. */
+enum utf8_state
+utf8_combine(const struct utf8_data *ud, wchar_t *wc)
+{
+#ifdef HAVE_UTF8PROC
+	switch (utf8proc_mbtowc(wc, ud->data, ud->size)) {
+#else
+	switch (mbtowc(wc, ud->data, ud->size)) {
+#endif
+	case -1:
+		log_debug("UTF-8 %.*s, mbtowc() %d", (int)ud->size, ud->data,
+		    errno);
+		mbtowc(NULL, NULL, MB_CUR_MAX);
+		return (UTF8_ERROR);
+	case 0:
+		return (UTF8_ERROR);
+	default:
+		return (UTF8_DONE);
+	}
+}
+
+/* Split Unicode into UTF-8. */
+enum utf8_state
+utf8_split(wchar_t wc, struct utf8_data *ud)
+{
+	char	s[MB_LEN_MAX];
+	int	slen;
+
+#ifdef HAVE_UTF8PROC
+	slen = utf8proc_wctomb(s, wc);
+#else
+	slen = wctomb(s, wc);
+#endif
+	if (slen <= 0 || slen > (int)sizeof ud->data)
+		return (UTF8_ERROR);
+
+	memcpy(ud->data, s, slen);
+	ud->size = slen;
+
+	ud->width = utf8_width(wc);
+	return (UTF8_DONE);
+}
+#else
 static enum utf8_state
 utf8_width(struct utf8_data *ud, int *width)
 {
@@ -675,23 +736,7 @@ utf8_width(struct utf8_data *ud, int *width)
 	case 0:
 		return (UTF8_ERROR);
 	}
-#ifndef NO_USE_UTF8CJK
-	if (options_get_number(global_options, "utf8-cjk")) {
-#ifndef NO_USE_UTF8CJK_EMOJI
-		if (options_get_number(global_options, "utf8-emoji"))
-			*width = mk_wcwidth_cjk_emoji(wc);
-		else
-			*width = mk_wcwidth_cjk(wc);
-#else
-		*width = mk_wcwidth_cjk(wc);
-#endif
-	} else {
-		*width = mk_wcwidth(wc);
-	}
-	log_debug("UTF-8 %.*s, wcwidth() %d", (int)ud->size, ud->data, *width);
-#else
 	*width = wcwidth(wc);
-#endif
 	if (*width >= 0 && *width <= 0xff)
 		return (UTF8_DONE);
 	log_debug("UTF-8 %.*s, wcwidth() %d", (int)ud->size, ud->data, *width);
@@ -712,6 +757,7 @@ utf8_width(struct utf8_data *ud, int *width)
 #endif
 	return (UTF8_ERROR);
 }
+#endif
 
 /*
  * Open UTF-8 sequence.
@@ -740,6 +786,9 @@ utf8_open(struct utf8_data *ud, u_char ch)
 enum utf8_state
 utf8_append(struct utf8_data *ud, u_char ch)
 {
+#ifndef NO_USE_UTF8CJK
+	wchar_t wc;
+#endif
 	int	width;
 
 	if (ud->have >= ud->size)
@@ -756,7 +805,13 @@ utf8_append(struct utf8_data *ud, u_char ch)
 
 	if (ud->width == 0xff)
 		return (UTF8_ERROR);
+#ifndef NO_USE_UTF8CJK
+	if (utf8_combine(ud, &wc) != UTF8_DONE)
+		return (UTF8_ERROR);
+	if ((width = utf8_width(wc)) < 0)
+#else
 	if (utf8_width(ud, &width) != UTF8_DONE)
+#endif
 		return (UTF8_ERROR);
 	ud->width = width;
 

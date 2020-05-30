@@ -27,6 +27,9 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <termios.h>
+#ifndef NO_USE_UTF8CJK
+#include <wchar.h>
+#endif
 
 #ifdef HAVE_UTEMPTER
 #include <utempter.h>
@@ -603,7 +606,9 @@ struct msg_write_close {
 #define MOTION_MOUSE_MODES (MODE_MOUSE_BUTTON|MODE_MOUSE_ALL)
 
 /* A single UTF-8 character. */
+#ifdef NO_USE_UTF8CJK
 typedef u_int utf8_char;
+#endif
 
 /*
  * An expanded UTF-8 character. UTF8_SIZE must be big enough to hold combining
@@ -682,7 +687,11 @@ struct grid_cell {
 
 /* Grid extended cell entry. */
 struct grid_extd_entry {
+#ifndef NO_USE_UTF8CJK
+	wchar_t			data;
+#else
 	utf8_char		data;
+#endif
 	u_short			attr;
 	u_char			flags;
 	int			fg;
@@ -2900,13 +2909,19 @@ u_int		 session_group_attached_count(struct session_group *);
 void		 session_renumber_windows(struct session *);
 
 /* utf8.c */
+#ifdef NO_USE_UTF8CJK
 utf8_char	 utf8_build_one(char, u_int);
 enum utf8_state	 utf8_from_data(const struct utf8_data *, utf8_char *);
 void		 utf8_to_data(utf8_char, struct utf8_data *);
+#endif
 void		 utf8_set(struct utf8_data *, u_char);
 void		 utf8_copy(struct utf8_data *, const struct utf8_data *);
 enum utf8_state	 utf8_open(struct utf8_data *, u_char);
 enum utf8_state	 utf8_append(struct utf8_data *, u_char);
+#ifndef NO_USE_UTF8CJK
+enum utf8_state  utf8_combine(const struct utf8_data *, wchar_t *);
+enum utf8_state  utf8_split(wchar_t, struct utf8_data *);
+#endif
 int		 utf8_isvalid(const char *);
 int		 utf8_strvis(char *, const char *, size_t, int);
 int		 utf8_stravis(char **, const char *, int);
