@@ -470,7 +470,12 @@ input_key(struct screen *s, struct bufferevent *bev, key_code key)
 	if (justkey > 0x7f && justkey < KEYC_BASE) {
 		if (key & KEYC_META)
 			bufferevent_write(bev, "\033", 1);
+#ifndef NO_USE_UTF8CJK
+		if (utf8_split(justkey, &ud) != UTF8_DONE)
+			return (0);
+#else
 		utf8_to_data(justkey, &ud);
+#endif
 		bufferevent_write(bev, ud.data, ud.size);
 		return (0);
 	}

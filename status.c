@@ -1277,8 +1277,13 @@ append_key:
 		return (0);
 	if (key <= 0x7f)
 		utf8_set(&tmp, key);
+#ifndef NO_USE_UTF8CJK
+	else if (utf8_split(key, &tmp) != UTF8_DONE)
+		return (0);
+#else
 	else
 		utf8_to_data(key, &tmp);
+#endif
 
 	c->prompt_buffer = xreallocarray(c->prompt_buffer, size + 2,
 	    sizeof *c->prompt_buffer);

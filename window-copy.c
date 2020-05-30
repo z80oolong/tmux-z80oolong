@@ -2571,7 +2571,11 @@ window_copy_cellstring(const struct grid_line *gl, u_int px, size_t *size,
 		return (&gce->data.data);
 	}
 
+#ifndef NO_USE_UTF8CJK
+	utf8_split(gl->extddata[gce->offset].data, &ud);
+#else
 	utf8_to_data(gl->extddata[gce->offset].data, &ud);
+#endif
 	*size = ud.size;
 	*allocated = 1;
 
