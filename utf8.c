@@ -321,11 +321,7 @@ int mk_wcwidth_cjk(wchar_t ucs)
 	       sizeof(ambiguous) / sizeof(struct interval) - 1))
     return 2;
 
-#if 1
-  return wcwidth(ucs);
-#else
   return mk_wcwidth(ucs);
-#endif
 }
 
 
@@ -571,16 +567,14 @@ utf8_width(struct utf8_data *ud, int *width)
 		*width = mk_wcwidth(wc);
 	}
 	log_debug("UTF-8 %.*s, wcwidth() %d", (int)ud->size, ud->data, *width);
-	if (*width < 0)
-		return (UTF8_ERROR);
-
-	return (UTF8_DONE);
+	if (*width >= 0 && *width <= 0xff)
+		return (UTF8_DONE);
 #else
 	*width = wcwidth(wc);
-
 	if (*width >= 0 && *width <= 0xff)
 		return (UTF8_DONE);
 	log_debug("UTF-8 %.*s, wcwidth() %d", (int)ud->size, ud->data, *width);
+#endif
 
 #ifndef __OpenBSD__
 	/*
@@ -597,7 +591,6 @@ utf8_width(struct utf8_data *ud, int *width)
 	}
 #endif
 	return (UTF8_ERROR);
-#endif
 }
 
 /*
