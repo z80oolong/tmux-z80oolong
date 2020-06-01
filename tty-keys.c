@@ -578,11 +578,7 @@ tty_keys_next1(struct tty *tty, const char *buf, size_t len, key_code *key,
 	struct tty_key		*tk, *tk1;
 	struct utf8_data	 ud;
 	enum utf8_state		 more;
-#ifndef NO_USE_UTF8CJK
-	wchar_t			 wc;
-#else
 	utf8_char		 uc;
-#endif
 	u_int			 i;
 
 	log_debug("%s: next key is %zu (%.*s) (expired=%d)", c->name, len,
@@ -615,21 +611,12 @@ tty_keys_next1(struct tty *tty, const char *buf, size_t len, key_code *key,
 		if (more != UTF8_DONE)
 			return (-1);
 
-#ifndef NO_USE_UTF8CJK
-		if (utf8_combine(&ud, &wc) != UTF8_DONE)
-			return (-1);
-		*key = wc;
-
-		log_debug("%s: UTF-8 key %.*s %#llx", c->name, (int)ud.size,
-		    buf, *key);
-#else
 		if (utf8_from_data(&ud, &uc) != UTF8_DONE)
 			return (-1);
 		*key = uc;
 
 		log_debug("%s: UTF-8 key %.*s %#llx", c->name, (int)ud.size,
 		    ud.data, *key);
-#endif
 		return (0);
 	}
 

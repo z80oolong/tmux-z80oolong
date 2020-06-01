@@ -169,11 +169,7 @@ key_string_lookup_string(const char *string)
 	struct utf8_data	 ud;
 	u_int			 i;
 	enum utf8_state		 more;
-#ifndef NO_USE_UTF8CJK
-	wchar_t			 wc;
-#else
 	utf8_char		 uc;
-#endif
 
 	/* Is this no key or any key? */
 	if (strcasecmp(string, "None") == 0)
@@ -214,15 +210,9 @@ key_string_lookup_string(const char *string)
 				more = utf8_append(&ud, (u_char)string[i]);
 			if (more != UTF8_DONE)
 				return (KEYC_UNKNOWN);
-#ifndef NO_USE_UTF8CJK
-			if (utf8_combine(&ud, &wc) != UTF8_DONE)
-				return (KEYC_UNKNOWN);
-			return (wc | modifiers);
-#else
 			if (utf8_from_data(&ud, &uc) != UTF8_DONE)
 				return (KEYC_UNKNOWN);
 			return (uc|modifiers);
-#endif
 		}
 
 		/* Otherwise look the key up in the table. */
@@ -359,11 +349,7 @@ key_string_lookup_key(key_code key, int with_flags)
 
 	/* Is this a UTF-8 key? */
 	if (key > 127 && key < KEYC_BASE) {
-#ifndef NO_USE_UTF8CJK
 		utf8_to_data(key, &ud);
-#else
-		utf8_split(key, &ud);
-#endif
 		off = strlen(out);
 		memcpy(out + off, ud.data, ud.size);
 		out[off + ud.size] = '\0';

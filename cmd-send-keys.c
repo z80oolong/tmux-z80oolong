@@ -92,11 +92,7 @@ cmd_send_keys_inject_string(struct cmdq_item *item, struct cmdq_item *after,
 {
 	const char		*s = args->argv[i];
 	struct utf8_data	*ud, *loop;
-#ifndef NO_USE_UTF8CJK
-	wchar_t			 wc;
-#else
 	utf8_char		 uc;
-#endif
 	key_code		 key;
 	char			*endptr;
 	long			 n;
@@ -125,11 +121,7 @@ cmd_send_keys_inject_string(struct cmdq_item *item, struct cmdq_item *after,
 			if (loop->size == 1 && loop->data[0] <= 0x7f)
 				key = loop->data[0];
 			else {
-#ifndef NO_USE_UTF8CJK
-				if (utf8_combine(loop, &wc) != UTF8_DONE)
-#else
 				if (utf8_from_data(loop, &uc) != UTF8_DONE)
-#endif
 					continue;
 				key = uc;
 			}
