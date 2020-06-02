@@ -461,6 +461,7 @@ union utf8_map {
 #ifndef NO_USE_UTF8CJK
 #define UTF8_FLAG_WIDTH0 0x40
 #endif
+
 		u_char	data[3];
 	};
 } __packed;
@@ -479,6 +480,7 @@ static const union utf8_map utf8_null = {
 	.data = ""
 };
 #endif
+
 /* Get a UTF-8 item by offset. */
 static struct utf8_item *
 utf8_get_item(const char *data, size_t size)
