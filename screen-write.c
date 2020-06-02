@@ -40,8 +40,7 @@ static const struct grid_cell *screen_write_combine(struct screen_write_ctx *,
 
 static const struct grid_cell screen_write_pad_cell = {
 #ifndef NO_USE_UTF8CJK
-//	{ { 0 }, 0, 0, 0 }, 0, GRID_FLAG_PADDING, 0, 8, 8
-	{ { 0 }, 1, 1, 1 }, 0, GRID_FLAG_PADDING, 0, 8, 8
+	{ { 0 }, 0, 0, 0 }, 0, GRID_FLAG_PADDING, 0, 8, 8
 #else
 	{ { ' ' }, 0, 1, 1 }, 0, GRID_FLAG_PADDING, 8, 8, 0
 #endif

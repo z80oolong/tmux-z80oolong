@@ -370,7 +370,9 @@ union utf8_map {
 		u_char	flags;
 #define UTF8_FLAG_SIZE 0x1f
 #define UTF8_FLAG_WIDTH2 0x20
-
+#ifndef NO_USE_UTF8CJK
+#define UTF8_FLAG_WIDTH0 0x40
+#endif
 		u_char	data[3];
 	};
 } __packed;
@@ -383,7 +385,12 @@ static const union utf8_map utf8_space2 = {
 	.flags = UTF8_FLAG_WIDTH2|2,
 	.data = "  "
 };
-
+#ifndef NO_USE_UTF8CJK
+static const union utf8_map utf8_null = {
+	.flags = UTF8_FLAG_WIDTH0,
+	.data = ""
+};
+#endif
 /* Get a UTF-8 item by offset. */
 static struct utf8_item *
 utf8_get_item(const char *data, size_t size)
@@ -447,10 +454,19 @@ utf8_from_data(const struct utf8_data *ud, utf8_char *uc)
 	union utf8_map	 m = { .uc = 0 };
 	u_int		 offset;
 
+#ifndef NO_USE_UTF8CJK
+	if (ud->width == 0 || ud->size == 0) {
+		*uc = utf8_null.uc;
+		return (UTF8_DONE);
+	}
+	if (ud->width >= 3)
+		fatalx("invalid UTF-8 width");
+#else
 	if (ud->width != 1 && ud->width != 2)
 		fatalx("invalid UTF-8 width");
 	if (ud->size == 0)
 		fatalx("invalid UTF-8 size");
+#endif
 
 	if (ud->size > UTF8_FLAG_SIZE)
 		goto fail;
@@ -493,7 +509,13 @@ utf8_to_data(utf8_char uc, struct utf8_data *ud)
 
 	memset(ud, 0, sizeof *ud);
 	ud->size = ud->have = (m.flags & UTF8_FLAG_SIZE);
+#ifndef NO_USE_UTF8CJK
+	if (m.flags & UTF8_FLAG_WIDTH0)
+		ud->width = 0;
+	else if (m.flags & UTF8_FLAG_WIDTH2)
+#else
 	if (m.flags & UTF8_FLAG_WIDTH2)
+#endif
 		ud->width = 2;
 	else
 		ud->width = 1;
