@@ -1086,6 +1086,20 @@ const struct options_table_entry options_table[] = {
 #endif
 #endif
 
+#ifndef NO_USE_PANE_BORDER_ACS_ASCII
+	{ .name = "pane-border-acs",
+	  .type = OPTIONS_TABLE_FLAG,
+	  .scope = OPTIONS_TABLE_SESSION,
+	  .default_num = 0
+	},
+
+	{ .name = "pane-border-ascii",
+	  .type = OPTIONS_TABLE_FLAG,
+	  .scope = OPTIONS_TABLE_SESSION,
+	  .default_num = 0
+	},
+#endif
+
 	/* Hook options. */
 	OPTIONS_TABLE_HOOK("after-bind-key", ""),
 	OPTIONS_TABLE_HOOK("after-capture-pane", ""),
