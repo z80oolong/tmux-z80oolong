@@ -1670,6 +1670,7 @@ struct client {
 	}		 exit_type;
 	enum msgtype	 exit_msgtype;
 	char		*exit_session;
+	char		*exit_message;
 
 	struct key_table *keytable;
 
@@ -1923,6 +1924,7 @@ struct format_tree *format_create(struct client *, struct cmdq_item *, int,
 		     int);
 void		 format_free(struct format_tree *);
 void		 format_merge(struct format_tree *, struct format_tree *);
+struct window_pane *format_get_pane(struct format_tree *);
 void printflike(3, 4) format_add(struct format_tree *, const char *,
 		     const char *, ...);
 void		 format_add_tv(struct format_tree *, const char *,
@@ -2720,7 +2722,7 @@ void		 window_set_name(struct window *, const char *);
 void		 window_add_ref(struct window *, const char *);
 void		 window_remove_ref(struct window *, const char *);
 void		 winlink_clear_flags(struct winlink *);
-int		 winlink_shuffle_up(struct session *, struct winlink *);
+int		 winlink_shuffle_up(struct session *, struct winlink *, int);
 int		 window_pane_start_input(struct window_pane *,
 		     struct cmdq_item *, char **);
 void		*window_pane_get_new_data(struct window_pane *,
@@ -2847,6 +2849,7 @@ void	control_stop(struct client *);
 void	control_set_pane_on(struct client *, struct window_pane *);
 void	control_set_pane_off(struct client *, struct window_pane *);
 void	control_continue_pane(struct client *, struct window_pane *);
+void	control_pause_pane(struct client *, struct window_pane *);
 struct window_pane_offset *control_pane_offset(struct client *,
 	   struct window_pane *, int *);
 void	control_reset_offsets(struct client *);
