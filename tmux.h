@@ -1724,6 +1724,15 @@ struct client {
 };
 TAILQ_HEAD(clients, client);
 
+/* Control mode subscription type. */
+enum control_sub_type {
+	CONTROL_SUB_SESSION,
+	CONTROL_SUB_PANE,
+	CONTROL_SUB_ALL_PANES,
+	CONTROL_SUB_WINDOW,
+	CONTROL_SUB_ALL_WINDOWS
+};
+
 /* Key binding and key table. */
 struct key_binding {
 	key_code		 key;
@@ -2422,7 +2431,9 @@ void	 server_lock(void);
 void	 server_lock_session(struct session *);
 void	 server_lock_client(struct client *);
 void	 server_kill_pane(struct window_pane *);
-void	 server_kill_window(struct window *);
+void	 server_kill_window(struct window *, int);
+void	 server_renumber_session(struct session *);
+void	 server_renumber_all(void);
 int	 server_link_window(struct session *,
 	     struct winlink *, struct session *, int, int, int, char **);
 void	 server_unlink_window(struct session *, struct winlink *);
@@ -2862,6 +2873,9 @@ void	control_reset_offsets(struct client *);
 void printflike(2, 3) control_write(struct client *, const char *, ...);
 void	control_write_output(struct client *, struct window_pane *);
 int	control_all_done(struct client *);
+void	control_add_sub(struct client *, const char *, enum control_sub_type,
+    	   int, const char *);
+void	control_remove_sub(struct client *, const char *);
 
 /* control-notify.c */
 void	control_notify_input(struct client *, struct window_pane *,
