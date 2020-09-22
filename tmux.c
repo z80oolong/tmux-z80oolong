@@ -325,8 +325,8 @@ main(int argc, char **argv)
 	char					*ctype;
 #endif
 	const char				*s, *shell, *cwd;
-	int					 opt, flags = 0, keys;
-	int					 feat = 0;
+	int					 opt, keys, feat = 0;
+	uint64_t				 flags = 0;
 	const struct options_table_entry	*oe;
 
 #ifdef NO_USE_UTF8CJK
