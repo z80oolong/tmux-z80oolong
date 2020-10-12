@@ -450,6 +450,7 @@ enum tty_code_code {
 	TTYC_KUP6,
 	TTYC_KUP7,
 	TTYC_MS,
+	TTYC_OL,
 	TTYC_OP,
 	TTYC_REV,
 	TTYC_RGB,
@@ -461,6 +462,7 @@ enum tty_code_code {
 	TTYC_SE,
 	TTYC_SETAB,
 	TTYC_SETAF,
+	TTYC_SETAL,
 	TTYC_SETRGBB,
 	TTYC_SETRGBF,
 	TTYC_SETULC,
@@ -498,6 +500,7 @@ enum msgtype {
 	MSG_IDENTIFY_CWD,
 	MSG_IDENTIFY_FEATURES,
 	MSG_IDENTIFY_STDOUT,
+	MSG_IDENTIFY_LONGFLAGS,
 
 	MSG_COMMAND = 200,
 	MSG_DETACH,
@@ -2333,7 +2336,7 @@ void printflike(2, 3) cmdq_error(struct cmdq_item *, const char *, ...);
 void	cmd_wait_for_flush(void);
 
 /* client.c */
-int	client_main(struct event_base *, int, char **, int, int);
+int	client_main(struct event_base *, int, char **, uint64_t, int);
 
 /* key-bindings.c */
 struct key_table *key_bindings_get_table(const char *, int);
