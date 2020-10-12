@@ -113,6 +113,7 @@ AC_REPLACE_FUNCS([ \
 	fgetln \
 	freezero \
 	getdtablecount \
+	getdtablesize \
 	getline \
 	getprogname \
 	memmem \
@@ -328,8 +329,34 @@ AC_SEARCH_LIBS(inet_ntoa, nsl)
 AC_SEARCH_LIBS(socket, socket)
 AC_CHECK_LIB(xnet, socket)
 
-# Check for CMSG_DATA. Some platforms require _XOPEN_SOURCE_EXTENDED (for
-# example see xopen_networking(7) on HP-UX).
+# Check if using glibc and have malloc_trim(3). The glibc free(3) is pretty bad
+# about returning memory to the kernel unless the application tells it when to
+# with malloc_trim(3).
+AC_MSG_CHECKING(if free doesn't work very well)
+AC_LINK_IFELSE([AC_LANG_SOURCE(
+	[
+		#include <stdlib.h>
+		#ifdef __GLIBC__
+		#include <malloc.h>
+		int main(void) {
+			malloc_trim (0);
+			exit(0);
+		}
+		#else
+		no
+		#endif
+	])],
+	found_malloc_trim=yes,
+	found_malloc_trim=no
+)
+AC_MSG_RESULT($found_malloc_trim)
+if test "x$found_malloc_trim" = xyes; then
+	AC_DEFINE(HAVE_MALLOC_TRIM)
+fi
+
+# Check for CMSG_DATA. On some platforms like HP-UX this requires UNIX 95
+# (_XOPEN_SOURCE and _XOPEN_SOURCE_EXTENDED) (see xopen_networking(7)). On
+# others, UNIX 03 (_XOPEN_SOURCE 600, see standards(7) on Solaris).
 XOPEN_DEFINES=
 AC_MSG_CHECKING(for CMSG_DATA)
 AC_EGREP_CPP(
@@ -362,6 +389,25 @@ if test "x$found_cmsg_data" = xno; then
 	AC_MSG_RESULT($found_cmsg_data)
 	if test "x$found_cmsg_data" = xyes; then
 		XOPEN_DEFINES="-D_XOPEN_SOURCE -D_XOPEN_SOURCE_EXTENDED"
+	fi
+fi
+if test "x$found_cmsg_data" = xno; then
+	AC_MSG_CHECKING(if CMSG_DATA needs _XOPEN_SOURCE 600)
+	AC_EGREP_CPP(
+		yes,
+		[
+			#define _XOPEN_SOURCE 600
+			#include <sys/socket.h>
+			#ifdef CMSG_DATA
+			yes
+			#endif
+		],
+		found_cmsg_data=yes,
+		found_cmsg_data=no
+	)
+	AC_MSG_RESULT($found_cmsg_data)
+	if test "x$found_cmsg_data" = xyes; then
+		XOPEN_DEFINES="-D_XOPEN_SOURCE=600"
 	else
 		AC_MSG_ERROR("CMSG_DATA not found")
 	fi
