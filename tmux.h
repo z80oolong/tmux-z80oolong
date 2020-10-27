@@ -69,16 +69,23 @@ struct winlink;
 /* Client-server protocol version. */
 #define PROTOCOL_VERSION 8
 
-#ifdef NO_USE_UTF8CJK
-#define NO_USE_UTF8CJK_EMOJI
-#endif
-
 /* Default configuration files and socket paths. */
 #ifndef TMUX_CONF
 #define TMUX_CONF "/etc/tmux.conf:~/.tmux.conf"
 #endif
 #ifndef TMUX_SOCK
 #define TMUX_SOCK "$TMUX_TMPDIR:" _PATH_TMP
+#endif
+
+/* If "pane-border-ascii" is not used, "utf8-cjk" is not used too. */
+#ifdef NO_USE_PANE_BORDER_ASCII
+#ifndef NO_USE_UTF8CJK
+#define NO_USE_UTF8CJK
+#endif
+#endif
+
+#ifdef NO_USE_UTF8CJK
+#define NO_USE_UTF8CJK_EMOJI
 #endif
 
 /* Minimum layout cell size, NOT including border lines. */
