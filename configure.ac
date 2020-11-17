@@ -21,6 +21,26 @@ SAVED_CFLAGS="$CFLAGS"
 SAVED_CPPFLAGS="$CPPFLAGS"
 SAVED_LDFLAGS="$LDFLAGS"
 
+# Is this oss-fuzz build?
+AC_ARG_ENABLE(
+	fuzzing,
+	AC_HELP_STRING(--enable-fuzzing, build fuzzers)
+)
+AC_ARG_VAR(
+	FUZZING_LIBS,
+	AC_HELP_STRING(libraries to link fuzzing targets with)
+)
+
+# Set up convenient fuzzing defaults before initializing compiler.
+if test "x$enable_fuzzing" = xyes; then
+	AC_DEFINE(NEED_FUZZING)
+	test "x$CC" == x && CC=clang
+	test "x$FUZZING_LIBS" == x && \
+		FUZZING_LIBS="-fsanitize=fuzzer"
+	test "x$SAVED_CFLAGS" == x && \
+		AM_CFLAGS="-g -fsanitize=fuzzer-no-link,address"
+fi
+
 # Set up the compiler in two different ways and say yes we may want to install.
 AC_PROG_CC
 AM_PROG_CC_C_O
@@ -54,8 +74,11 @@ if test "x$enable_static" = xyes; then
 	LDFLAGS="$AM_LDFLAGS $SAVED_LDFLAGS"
 fi
 
+# Do we need fuzzers?
+AM_CONDITIONAL(NEED_FUZZING, test "x$enable_fuzzing" = xyes)
+
 # Is this gcc?
-AM_CONDITIONAL(IS_GCC, test "x$GCC" = xyes)
+AM_CONDITIONAL(IS_GCC, test "x$GCC" = xyes -a "x$enable_fuzzing" != xyes)
 
 # Is this Sun CC?
 AC_EGREP_CPP(
@@ -117,8 +140,6 @@ AC_REPLACE_FUNCS([ \
 	getline \
 	getprogname \
 	memmem \
-	recallocarray \
-	reallocarray \
 	setenv \
 	setproctitle \
 	strcasestr \
@@ -129,6 +150,26 @@ AC_REPLACE_FUNCS([ \
 	strtonum \
 ])
 AC_FUNC_STRNLEN
+
+# Clang sanitizers wrap reallocarray even if it isn't available on the target
+# system. When compiled it always returns NULL and crashes the program. To
+# detect this we need a more complicated test.
+AC_MSG_CHECKING([for working reallocarray])
+AC_RUN_IFELSE([AC_LANG_PROGRAM(
+		[#include <stdlib.h>],
+		[return (reallocarray(NULL, 1, 1) == NULL);]
+	)],
+	AC_MSG_RESULT(yes),
+	[AC_LIBOBJ(reallocarray) AC_MSG_RESULT([no])]
+)
+AC_MSG_CHECKING([for working recallocarray])
+AC_RUN_IFELSE([AC_LANG_PROGRAM(
+		[#include <stdlib.h>],
+		[return (recallocarray(NULL, 1, 1, 1) == NULL);]
+	)],
+	AC_MSG_RESULT(yes),
+	[AC_LIBOBJ(recallocarray) AC_MSG_RESULT([no])]
+)
 
 # Look for clock_gettime. Must come before event_init.
 AC_SEARCH_LIBS(clock_gettime, rt)
@@ -296,12 +337,11 @@ AC_TRY_LINK(
 	found_b64_ntop=yes,
 	found_b64_ntop=no
 )
+OLD_LIBS="$LIBS"
 if test "x$found_b64_ntop" = xno; then
 	AC_MSG_RESULT(no)
-
 	AC_MSG_CHECKING(for b64_ntop with -lresolv)
-	OLD_LIBS="$LIBS"
-	LIBS="$LIBS -lresolv"
+	LIBS="$OLD_LIBS -lresolv"
 	AC_TRY_LINK(
 		[
 			#include <sys/types.h>
@@ -312,16 +352,28 @@ if test "x$found_b64_ntop" = xno; then
 		found_b64_ntop=yes,
 		found_b64_ntop=no
 	)
-	if test "x$found_b64_ntop" = xno; then
-		LIBS="$OLD_LIBS"
-		AC_MSG_RESULT(no)
-	fi
+fi
+if test "x$found_b64_ntop" = xno; then
+	AC_MSG_CHECKING(for b64_ntop with -lnetwork)
+	LIBS="$OLD_LIBS -lnetwork"
+	AC_TRY_LINK(
+		[
+			#include <sys/types.h>
+			#include <netinet/in.h>
+			#include <resolv.h>
+		],
+		[b64_ntop(NULL, 0, NULL, 0);],
+		found_b64_ntop=yes,
+		found_b64_ntop=no
+	)
 fi
 if test "x$found_b64_ntop" = xyes; then
 	AC_DEFINE(HAVE_B64_NTOP)
 	AC_MSG_RESULT(yes)
 else
+	LIBS="$OLD_LIBS"
 	AC_LIBOBJ(base64)
+	AC_MSG_RESULT(no)
 fi
 
 # Look for networking libraries.
@@ -656,6 +708,10 @@ case "$host_os" in
 		AC_MSG_RESULT(cygwin)
 		PLATFORM=cygwin
 		;;
+	*haiku*)
+		AC_MSG_RESULT(haiku)
+		PLATFORM=haiku
+		;;
 	*)
 		AC_MSG_RESULT(unknown)
 		PLATFORM=unknown
@@ -671,6 +727,7 @@ AM_CONDITIONAL(IS_NETBSD, test "x$PLATFORM" = xnetbsd)
 AM_CONDITIONAL(IS_OPENBSD, test "x$PLATFORM" = xopenbsd)
 AM_CONDITIONAL(IS_SUNOS, test "x$PLATFORM" = xsunos)
 AM_CONDITIONAL(IS_HPUX, test "x$PLATFORM" = xhpux)
+AM_CONDITIONAL(IS_HAIKU, test "x$PLATFORM" = xhaiku)
 AM_CONDITIONAL(IS_UNKNOWN, test "x$PLATFORM" = xunknown)
 
 # Save our CFLAGS/CPPFLAGS/LDFLAGS for the Makefile and restore the old user
