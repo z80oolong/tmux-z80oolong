@@ -58,6 +58,11 @@ if IS_NETBSD
 AM_CPPFLAGS += -D_OPENBSD_SOURCE
 endif
 
+# Set flags for Haiku.
+if IS_HAIKU
+AM_CPPFLAGS += -D_BSD_SOURCE
+endif
+
 # List of sources.
 dist_tmux_SOURCES = \
 	alerts.c \
@@ -195,6 +200,12 @@ endif
 # Add compat file for utf8proc.
 if HAVE_UTF8PROC
 nodist_tmux_SOURCES += compat/utf8proc.c
+endif
+
+if NEED_FUZZING
+check_PROGRAMS = fuzz/input-fuzzer
+fuzz_input_fuzzer_LDFLAGS = $(FUZZING_LIBS)
+fuzz_input_fuzzer_LDADD = $(LDADD) $(tmux_OBJECTS)
 endif
 
 # Install tmux.1 in the right format.
