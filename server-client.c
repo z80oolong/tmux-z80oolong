@@ -21,7 +21,6 @@
 #include <sys/uio.h>
 
 #include <errno.h>
-#include <event.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1779,11 +1778,11 @@ server_client_check_exit(struct client *c)
 
 	switch (c->exit_type) {
 	case CLIENT_EXIT_RETURN:
-		if (c->exit_message != NULL) {
+		if (c->exit_message != NULL)
 			msize = strlen(c->exit_message) + 1;
-			size = (sizeof c->retval) + msize;
-		} else
-			size = (sizeof c->retval);
+		else
+			msize = 0;
+		size = (sizeof c->retval) + msize;
 		data = xmalloc(size);
 		memcpy(data, &c->retval, sizeof c->retval);
 		if (c->exit_message != NULL)

@@ -22,7 +22,6 @@
 #include <sys/time.h>
 #include <sys/uio.h>
 
-#include <event.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -1648,7 +1647,7 @@ struct client {
 #define CLIENT_DEAD 0x200
 #define CLIENT_REDRAWBORDERS 0x400
 #define CLIENT_READONLY 0x800
-/* 0x1000 unused */
+#define CLIENT_NOSTARTSERVER 0x1000
 #define CLIENT_CONTROL 0x2000
 #define CLIENT_CONTROLCONTROL 0x4000
 #define CLIENT_FOCUSED 0x8000
@@ -1902,7 +1901,6 @@ const char	*find_cwd(void);
 const char	*find_home(void);
 const char	*getversion(void);
 void		 expand_paths(const char *, char ***, u_int *);
-
 
 /* proc.c */
 struct imsg;
