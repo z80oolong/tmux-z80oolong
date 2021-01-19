@@ -21,7 +21,6 @@
 #include <sys/utsname.h>
 
 #include <errno.h>
-#include <event.h>
 #include <fcntl.h>
 #include <langinfo.h>
 #include <locale.h>
@@ -54,7 +53,7 @@ static __dead void
 usage(void)
 {
 	fprintf(stderr,
-	    "usage: %s [-2CDluvV] [-c shell-command] [-f file] [-L socket-name]\n"
+	    "usage: %s [-2CDlNuvV] [-c shell-command] [-f file] [-L socket-name]\n"
 	    "            [-S socket-path] [-T features] [command [flags]]\n",
 	    getprogname());
 	exit(1);
@@ -341,7 +340,7 @@ main(int argc, char **argv)
 	if (**argv == '-')
 		flags = CLIENT_LOGIN;
 
-	while ((opt = getopt(argc, argv, "2c:CDdf:lL:qS:T:uUvV")) != -1) {
+	while ((opt = getopt(argc, argv, "2c:CDdf:lL:NqS:T:uUvV")) != -1) {
 		switch (opt) {
 		case '2':
 			tty_add_features(&feat, "256", ":,");
@@ -370,6 +369,9 @@ main(int argc, char **argv)
 		case 'L':
 			free(label);
 			label = xstrdup(optarg);
+			break;
+		case 'N':
+			flags |= CLIENT_NOSTARTSERVER;
 			break;
 		case 'q':
 			break;
