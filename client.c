@@ -24,7 +24,6 @@
 #include <sys/file.h>
 
 #include <errno.h>
-#include <event.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -126,6 +125,8 @@ retry:
 	if (connect(fd, (struct sockaddr *)&sa, sizeof sa) == -1) {
 		log_debug("connect failed: %s", strerror(errno));
 		if (errno != ECONNREFUSED && errno != ENOENT)
+			goto failed;
+		if (flags & CLIENT_NOSTARTSERVER)
 			goto failed;
 		if (~flags & CLIENT_STARTSERVER)
 			goto failed;
