@@ -367,7 +367,10 @@ format_job_get(struct format_expand_state *es, const char *cmd)
 		RB_INSERT(format_job_tree, jobs, fj);
 	}
 
-	expanded = format_expand1(es, cmd);
+	format_copy_state(&next, es, FORMAT_EXPAND_NOJOBS);
+	next.flags &= ~FORMAT_EXPAND_TIME;
+
+	expanded = format_expand1(&next, cmd);
 	if (fj->expanded == NULL || strcmp(expanded, fj->expanded) != 0) {
 		free((void *)fj->expanded);
 		fj->expanded = xstrdup(expanded);
@@ -393,7 +396,6 @@ format_job_get(struct format_expand_state *es, const char *cmd)
 
 	if (ft->flags & FORMAT_STATUS)
 		fj->status = 1;
-	format_copy_state(&next, es, FORMAT_EXPAND_NOJOBS);
 	return (format_expand1(&next, fj->out));
 }
 
@@ -874,6 +876,28 @@ format_cb_pane_tabs(struct format_tree *ft)
 		xasprintf(&value, "%.*s", size, EVBUFFER_DATA(buffer));
 	evbuffer_free(buffer);
 	return (value);
+}
+
+/* Callback for pane_fg. */
+static char *
+format_cb_pane_fg(struct format_tree *ft)
+{
+	struct window_pane	*wp = ft->wp;
+	struct grid_cell	 gc;
+
+	tty_default_colours(&gc, wp);
+	return (xstrdup(colour_tostring(gc.fg)));
+}
+
+/* Callback for pane_bg. */
+static char *
+format_cb_pane_bg(struct format_tree *ft)
+{
+	struct window_pane	*wp = ft->wp;
+	struct grid_cell	 gc;
+
+	tty_default_colours(&gc, wp);
+	return (xstrdup(colour_tostring(gc.bg)));
 }
 
 /* Callback for session_group_list. */
@@ -3193,6 +3217,8 @@ format_defaults_pane(struct format_tree *ft, struct window_pane *wp)
 	    !!(wp->base.mode & MODE_MOUSE_SGR));
 
 	format_add_cb(ft, "pane_tabs", format_cb_pane_tabs);
+	format_add_cb(ft, "pane_fg", format_cb_pane_fg);
+	format_add_cb(ft, "pane_bg", format_cb_pane_bg);
 }
 
 /* Set default format keys for paste buffer. */
