@@ -1888,7 +1888,6 @@ const char	*sig2name(int);
 const char	*find_cwd(void);
 const char	*find_home(void);
 const char	*getversion(void);
-void		 expand_paths(const char *, char ***, u_int *);
 
 /* proc.c */
 struct imsg;
@@ -1908,13 +1907,14 @@ pid_t	proc_fork_and_daemon(int *);
 /* cfg.c */
 extern int cfg_finished;
 extern struct client *cfg_client;
+extern char **cfg_files;
+extern u_int cfg_nfiles;
+extern int cfg_quiet;
 void	start_cfg(void);
 int	load_cfg(const char *, struct client *, struct cmdq_item *, int,
 	    struct cmdq_item **);
 int	load_cfg_from_buffer(const void *, size_t, const char *,
 	    struct client *, struct cmdq_item *, int, struct cmdq_item **);
-void	set_cfg_file(const char *);
-const char *get_cfg_file(void);
 void printflike(1, 2) cfg_add_cause(const char *, ...);
 void	cfg_print_causes(struct cmdq_item *);
 void	cfg_show_causes(struct session *);
@@ -1945,7 +1945,7 @@ char		*paste_make_sample(struct paste_buffer *);
 #define FORMAT_WINDOW 0x40000000U
 struct format_tree;
 struct format_modifier;
-typedef char *(*format_cb)(struct format_tree *);
+typedef void *(*format_cb)(struct format_tree *);
 const char	*format_skip(const char *, const char *);
 int		 format_true(const char *);
 struct format_tree *format_create(struct client *, struct cmdq_item *, int,
@@ -2590,6 +2590,10 @@ void	 grid_reader_cursor_next_word(struct grid_reader *, const char *);
 void	 grid_reader_cursor_next_word_end(struct grid_reader *, const char *);
 void	 grid_reader_cursor_previous_word(struct grid_reader *, const char *,
 	     int);
+int	 grid_reader_cursor_jump(struct grid_reader *,
+	     const struct utf8_data *);
+int	 grid_reader_cursor_jump_back(struct grid_reader *,
+	     const struct utf8_data *);
 
 /* grid-view.c */
 void	 grid_view_get_cell(struct grid *, u_int, u_int, struct grid_cell *);
@@ -2710,7 +2714,6 @@ void	 screen_alternate_off(struct screen *, struct grid_cell *, int);
 /* window.c */
 extern struct windows windows;
 extern struct window_pane_tree all_window_panes;
-extern const struct window_mode *all_window_modes[];
 int		 window_cmp(struct window *, struct window *);
 RB_PROTOTYPE(windows, window, entry, window_cmp);
 int		 winlink_cmp(struct winlink *, struct winlink *);
