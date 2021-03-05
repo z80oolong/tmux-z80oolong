@@ -646,6 +646,7 @@ utf8_width(struct utf8_data *ud, int *width)
 	log_debug("UTF-8 %.*s, wcwidth() %d", (int)ud->size, ud->data, *width);
 	if (*width >= 0 && *width <= 0xff)
 		return (UTF8_DONE);
+#else
 #ifdef HAVE_UTF8PROC
 	*width = utf8proc_wcwidth(wc);
 #else
