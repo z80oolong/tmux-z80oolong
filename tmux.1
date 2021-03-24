@@ -2804,7 +2804,7 @@ is given and the selected window is already the current window,
 the command behaves like
 .Ic last-window .
 .It Xo Ic split-window
-.Op Fl bdfhIvP
+.Op Fl bdfhIvPZ
 .Op Fl c Ar start-directory
 .Op Fl e Ar environment
 .Op Fl l Ar size
@@ -2840,6 +2840,8 @@ option creates a new pane spanning the full window height (with
 or full window width (with
 .Fl v ) ,
 instead of splitting the active pane.
+.Fl Z
+zooms if the window is not zoomed, or keeps it zoomed if already zoomed.
 .Pp
 An empty
 .Ar shell-command
@@ -3813,10 +3815,11 @@ seconds.
 By default, updates will occur every 15 seconds.
 A setting of zero disables redrawing at interval.
 .It Xo Ic status-justify
-.Op Ic left | centre | right
+.Op Ic left | centre | right | absolute-centre
 .Xc
-Set the position of the window list component of the status line: left, centre
-or right justified.
+Set the position of the window list in the status line: left, centre or right.
+centre puts the window list in the relative centre of the available free space;
+absolute-centre uses the centre of the entire horizontal space.
 .It Xo Ic status-keys
 .Op Ic vi | emacs
 .Xc
@@ -4923,9 +4926,6 @@ The following variables are available, where appropriate:
 .It Li "pane_tty" Ta "" Ta "Pseudo terminal of pane"
 .It Li "pane_width" Ta "" Ta "Width of pane"
 .It Li "pid" Ta "" Ta "Server PID"
-.It Li "popup_key" Ta "" Ta "Key pressed in popup"
-.It Li "popup_mouse_x" Ta "" Ta "Mouse X position in popup"
-.It Li "popup_mouse_y" Ta "" Ta "Mouse Y position in popup"
 .It Li "rectangle_toggle" Ta "" Ta "1 if rectangle selection is activated"
 .It Li "scroll_position" Ta "" Ta "Scroll position in copy mode"
 .It Li "scroll_region_lower" Ta "" Ta "Bottom of scroll region in pane"
@@ -5584,58 +5584,24 @@ lists the format variables and their values.
 forwards any input read from stdin to the empty pane given by
 .Ar target-pane .
 .It Xo Ic display-popup
-.Op Fl CEK
+.Op Fl CE
 .Op Fl c Ar target-client
 .Op Fl d Ar start-directory
 .Op Fl h Ar height
-.Op Fl R Ar shell-command
 .Op Fl t Ar target-pane
 .Op Fl w Ar width
 .Op Fl x Ar position
 .Op Fl y Ar position
-.Op Ar command Ar line Ar ...
+.Op Ar shell-command
 .Xc
 .D1 (alias: Ic popup )
-Display a popup on
+Display a popup running
+.Ar shell-command
+on
 .Ar target-client .
 A popup is a rectangular box drawn over the top of any panes.
 Panes are not updated while a popup is present.
-The popup content may be given in two ways:
-.Bl -enum -offset Ds
-.It
-A set of lines as arguments.
-Each line is a format which is expanded using
-.Ar target-pane
-as the target.
-If a line contains newlines it is split into multiple lines.
-Lines may use styles, see the
-.Sx STYLES
-section.
-.It
-A shell command given by
-.Fl R
-which is run and any output shown in the pane.
-.El
 .Pp
-The first argument,
-.Ar command ,
-is a
-.Nm
-command which is run when a key is pressed.
-The key is available in the
-.Ql popup_key
-format.
-After
-.Ar command
-is run, the popup is closed.
-It may be empty to discard any key presses.
-If
-.Fl K
-is given together with
-.Fl R ,
-key presses are instead passed to the
-.Fl R
-shell command.
 .Fl E
 closes the popup automatically when
 .Ar shell-command
@@ -5645,14 +5611,6 @@ Two
 closes the popup only if
 .Ar shell-command
 exited with success.
-With
-.Fl K ,
-.Ql Escape
-and
-.Ql C-c
-close the popup unless
-.Fl E
-is also given.
 .Pp
 .Fl x
 and
@@ -5665,11 +5623,7 @@ and
 .Fl h
 give the width and height - both may be a percentage (followed by
 .Ql % ) .
-If omitted, without
-.Fl R
-they are calculated from the given lines and with
-.Fl R
-they use half the terminal size.
+If omitted, half of the terminal size is used.
 .Pp
 The
 .Fl C
@@ -6153,6 +6107,8 @@ A notification will never occur inside an output block.
 .Pp
 The following notifications are defined:
 .Bl -tag -width Ds
+.It Ic %client-detached Ar client
+The client has detached.
 .It Ic %client-session-changed Ar client session-id name
 The client is now attached to the session with ID
 .Ar session-id ,

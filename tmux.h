@@ -752,7 +752,8 @@ enum style_align {
 	STYLE_ALIGN_DEFAULT,
 	STYLE_ALIGN_LEFT,
 	STYLE_ALIGN_CENTRE,
-	STYLE_ALIGN_RIGHT
+	STYLE_ALIGN_RIGHT,
+	STYLE_ALIGN_ABSOLUTE_CENTRE
 };
 
 /* Style list. */
@@ -1874,6 +1875,7 @@ struct spawn_context {
 #define SPAWN_NONOTIFY 0x10
 #define SPAWN_FULLSIZE 0x20
 #define SPAWN_EMPTY 0x40
+#define SPAWN_ZOOM 0x80
 };
 
 /* Mode tree sort order. */
@@ -1957,6 +1959,7 @@ char		*paste_make_sample(struct paste_buffer *);
 struct format_tree;
 struct format_modifier;
 typedef void *(*format_cb)(struct format_tree *);
+void		 format_tidy_jobs(void);
 const char	*format_skip(const char *, const char *);
 int		 format_true(const char *);
 struct format_tree *format_create(struct client *, struct cmdq_item *, int,
@@ -2079,9 +2082,9 @@ typedef void (*job_free_cb) (void *);
 #define JOB_NOWAIT 0x1
 #define JOB_KEEPWRITE 0x2
 #define JOB_PTY 0x4
-struct job	*job_run(const char *, struct session *, const char *,
-		     job_update_cb, job_complete_cb, job_free_cb, void *, int,
-		     int, int);
+struct job	*job_run(const char *, int, char **, struct session *,
+		     const char *, job_update_cb, job_complete_cb, job_free_cb,
+		     void *, int, int, int);
 void		 job_free(struct job *);
 void		 job_resize(struct job *, u_int, u_int);
 void		 job_check_died(pid_t, int);
@@ -2764,7 +2767,7 @@ void		 window_resize(struct window *, u_int, u_int, int, int);
 void		 window_pane_send_resize(struct window_pane *, int);
 int		 window_zoom(struct window_pane *);
 int		 window_unzoom(struct window *);
-int		 window_push_zoom(struct window *, int);
+int		 window_push_zoom(struct window *, int, int);
 int		 window_pop_zoom(struct window *);
 void		 window_lost_pane(struct window *, struct window_pane *);
 void		 window_remove_pane(struct window *, struct window_pane *);
@@ -2827,7 +2830,7 @@ void		 layout_set_size(struct layout_cell *, u_int, u_int, u_int,
 void		 layout_make_leaf(struct layout_cell *, struct window_pane *);
 void		 layout_make_node(struct layout_cell *, enum layout_type);
 void		 layout_fix_offsets(struct window *);
-void		 layout_fix_panes(struct window *);
+void		 layout_fix_panes(struct window *, struct window_pane *);
 void		 layout_resize_adjust(struct window *, struct layout_cell *,
 		     enum layout_type, int);
 void		 layout_init(struct window *, struct window_pane *);
@@ -2837,7 +2840,8 @@ void		 layout_resize_pane(struct window_pane *, enum layout_type,
 		     int, int);
 void		 layout_resize_pane_to(struct window_pane *, enum layout_type,
 		     u_int);
-void		 layout_assign_pane(struct layout_cell *, struct window_pane *);
+void		 layout_assign_pane(struct layout_cell *, struct window_pane *,
+		     int);
 struct layout_cell *layout_split_pane(struct window_pane *, enum layout_type,
 		     int, int);
 void		 layout_close_pane(struct window_pane *);
@@ -2953,6 +2957,7 @@ void	control_notify_window_unlinked(struct session *, struct window *);
 void	control_notify_window_linked(struct session *, struct window *);
 void	control_notify_window_renamed(struct window *);
 void	control_notify_client_session_changed(struct client *);
+void	control_notify_client_detached(struct client *);
 void	control_notify_session_renamed(struct session *);
 void	control_notify_session_created(struct session *);
 void	control_notify_session_closed(struct session *);
@@ -3051,18 +3056,13 @@ int		 menu_display(struct menu *, int, struct cmdq_item *, u_int,
 		    menu_choice_cb, void *);
 
 /* popup.c */
-#define POPUP_WRITEKEYS 0x1
-#define POPUP_CLOSEEXIT 0x2
-#define POPUP_CLOSEEXITZERO 0x4
+#define POPUP_CLOSEEXIT 0x1
+#define POPUP_CLOSEEXITZERO 0x2
 typedef void (*popup_close_cb)(int, void *);
 typedef void (*popup_finish_edit_cb)(char *, size_t, void *);
-u_int		 popup_width(struct cmdq_item *, u_int, const char **,
-		    struct client *, struct cmd_find_state *);
-u_int		 popup_height(u_int, const char **);
 int		 popup_display(int, struct cmdq_item *, u_int, u_int, u_int,
-		    u_int, u_int, const char **, const char *, const char *,
-		    const char *, struct client *, struct cmd_find_state *,
-		    popup_close_cb, void *);
+		    u_int, const char *, int, char **, const char *,
+		    struct client *, struct session *, popup_close_cb, void *);
 int		 popup_editor(struct client *, const char *, size_t,
 		    popup_finish_edit_cb, void *);
 
