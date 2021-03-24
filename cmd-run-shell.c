@@ -20,6 +20,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -174,7 +175,7 @@ cmd_run_shell_timer(__unused int fd, __unused short events, void* arg)
 	enum cmd_parse_status		 status;
 
 	if (cmd != NULL && cdata->shell) {
-		if (job_run(cmd, cdata->s, cdata->cwd, NULL,
+		if (job_run(cmd, 0, NULL, cdata->s, cdata->cwd, NULL,
 		    cmd_run_shell_callback, cmd_run_shell_free, cdata,
 		    cdata->flags, -1, -1) == NULL)
 			cmd_run_shell_free(cdata);
@@ -190,8 +191,12 @@ cmd_run_shell_timer(__unused int fd, __unused short events, void* arg)
 			    &error);
 		}
 		if (status == CMD_PARSE_ERROR) {
-		       cmdq_error(cdata->item, "%s", error);
-		       free(error);
+			if (cdata->item == NULL) {
+				*error = toupper((u_char)*error);
+				status_message_set(c, -1, 1, "%s", error);
+			} else
+				cmdq_error(cdata->item, "%s", error);
+			free(error);
 		}
 	}
 
