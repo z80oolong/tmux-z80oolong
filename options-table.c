@@ -74,6 +74,9 @@ static const char *options_table_remain_on_exit_list[] = {
 static const char *options_table_detach_on_destroy_list[] = {
 	"off", "on", "no-detached", NULL
 };
+static const char *options_table_extended_keys_list[] = {
+	"off", "on", "always", NULL
+};
 
 /* Status line format. */
 #define OPTIONS_TABLE_STATUS_FORMAT1 \
@@ -266,8 +269,9 @@ const struct options_table_entry options_table[] = {
 	},
 
 	{ .name = "extended-keys",
-	  .type = OPTIONS_TABLE_FLAG,
+	  .type = OPTIONS_TABLE_CHOICE,
 	  .scope = OPTIONS_TABLE_SERVER,
+	  .choices = options_table_extended_keys_list,
 	  .default_num = 0,
 	  .text = "Whether to request extended key sequences from terminals "
 	          "that support it."
@@ -295,6 +299,15 @@ const struct options_table_entry options_table[] = {
 	  .maximum = INT_MAX,
 	  .default_num = 1000,
 	  .text = "Maximum number of server messages to keep."
+	},
+
+	{ .name = "prompt-history-limit",
+	  .type = OPTIONS_TABLE_NUMBER,
+	  .scope = OPTIONS_TABLE_SERVER,
+	  .minimum = 0,
+	  .maximum = INT_MAX,
+	  .default_num = 100,
+	  .text = "Maximum number of commands to keep in history."
 	},
 
 	{ .name = "set-clipboard",
