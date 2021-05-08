@@ -641,24 +641,6 @@ tty_term_create(struct tty *tty, char *name, char **caps, u_int ncaps,
 	if (tty_apply_features(term, *feat))
 		tty_term_apply_overrides(term);
 
-	/*
-	 * Terminals without am (auto right margin) wrap at at $COLUMNS - 1
-	 * rather than $COLUMNS (the cursor can never be beyond $COLUMNS - 1).
-	 *
-	 * Terminals without xenl (eat newline glitch) ignore a newline beyond
-	 * the right edge of the terminal, but tmux doesn't care about this -
-	 * it always uses absolute only moves the cursor with a newline when
-	 * also sending a linefeed.
-	 *
-	 * This is irritating, most notably because it is painful to write to
-	 * the very bottom-right of the screen without scrolling.
-	 *
-	 * Flag the terminal here and apply some workarounds in other places to
-	 * do the best possible.
-	 */
-	if (!tty_term_flag(term, TTYC_AM))
-		term->flags |= TERM_NOAM;
-
 	/* Log the capabilities. */
 	for (i = 0; i < tty_term_ncodes(); i++)
 		log_debug("%s%s", name, tty_term_describe(term, i));
