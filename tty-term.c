@@ -502,6 +502,15 @@ tty_term_apply_overrides(struct tty_term *term)
 		term->flags &= ~TERM_NOAM;
 	log_debug("NOAM flag is %d", !!(term->flags & TERM_NOAM));
 
+#ifndef NO_USE_PANE_BORDER_ACS_ASCII
+	/* Generate ACS table. */
+	memset(term->acs, 0, sizeof term->acs);
+	if (tty_term_has(term, TTYC_ACSC)) {
+		acs = tty_term_string(term, TTYC_ACSC);
+		for (; acs[0] != '\0' && acs[1] != '\0'; acs += 2)
+			term->acs[(u_char) acs[0]][0] = acs[1];
+	}
+#else
 	/* Generate ACS table. If none is present, use nearest ASCII. */
 	memset(term->acs, 0, sizeof term->acs);
 	if (tty_term_has(term, TTYC_ACSC))
@@ -510,6 +519,7 @@ tty_term_apply_overrides(struct tty_term *term)
 		acs = "a#j+k+l+m+n+o-p-q-r-s-t+u+v+w+x|y<z>~.";
 	for (; acs[0] != '\0' && acs[1] != '\0'; acs += 2)
 		term->acs[(u_char) acs[0]][0] = acs[1];
+#endif
 }
 
 struct tty_term *
@@ -648,25 +658,6 @@ tty_term_create(struct tty *tty, char *name, char **caps, u_int ncaps,
 	 */
 	if (!tty_term_flag(term, TTYC_AM))
 		term->flags |= TERM_NOAM;
-
-#ifndef NO_USE_PANE_BORDER_ACS_ASCII
-	/* Generate ACS table. */
-	memset(term->acs, 0, sizeof term->acs);
-	if (tty_term_has(term, TTYC_ACSC)) {
-		acs = tty_term_string(term, TTYC_ACSC);
-		for (; acs[0] != '\0' && acs[1] != '\0'; acs += 2)
-			term->acs[(u_char) acs[0]][0] = acs[1];
-	}
-#else
-	/* Generate ACS table. If none is present, use nearest ASCII. */
-	memset(term->acs, 0, sizeof term->acs);
-	if (tty_term_has(term, TTYC_ACSC))
-		acs = tty_term_string(term, TTYC_ACSC);
-	else
-		acs = "a#j+k+l+m+n+o-p-q-r-s-t+u+v+w+x|y<z>~.";
-	for (; acs[0] != '\0' && acs[1] != '\0'; acs += 2)
-		term->acs[(u_char) acs[0]][0] = acs[1];
-#endif
 
 	/* Log the capabilities. */
 	for (i = 0; i < tty_term_ncodes(); i++)
