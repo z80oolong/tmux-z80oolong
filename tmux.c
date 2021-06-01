@@ -331,7 +331,7 @@ main(int argc, char **argv)
 	char					*ctype;
 #endif
 	const char				*s, *cwd;
-	int					 opt, keys, feat = 0;
+	int					 opt, keys, feat = 0, fflag = 0;
 	uint64_t				 flags = 0;
 	const struct options_table_entry	*oe;
 	u_int					 i;
@@ -382,10 +382,15 @@ main(int argc, char **argv)
 				flags |= CLIENT_CONTROL;
 			break;
 		case 'f':
-			for (i = 0; i < cfg_nfiles; i++)
-				free(cfg_files[i]);
-			free(cfg_files);
-			expand_paths(optarg, &cfg_files, &cfg_nfiles, 0);
+			if (!fflag) {
+				fflag = 1;
+				for (i = 0; i < cfg_nfiles; i++)
+					free(cfg_files[i]);
+				cfg_nfiles = 0;
+			}
+			cfg_files = xreallocarray(cfg_files, cfg_nfiles + 1,
+			    sizeof *cfg_files);
+			cfg_files[cfg_nfiles++] = xstrdup(optarg);
 			cfg_quiet = 0;
 			break;
  		case 'V':
